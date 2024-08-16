@@ -54,3 +54,46 @@ class InvertedBlock(nn.Module):
             return x + self.layers(x)
         else:
             return self.layers(x)
+
+class MobileNetV2(nn.Module):
+    def __init__(self, ch_in=3, n_classes=1000):
+        super(MobileNetV2, self).__init__()
+
+        self.configs=[
+            # t, c, n, s
+            [1, 16, 1, 1],
+            [6, 24, 2, 2],
+            [6, 32, 3, 2],
+            [6, 64, 4, 2],
+            [6, 96, 3, 1],
+            [6, 160, 3, 2],
+            [6, 320, 1, 1]
+        ]
+
+        self.stem_conv = conv3x3(ch_in, 32, stride=2)
+
+        layers = []
+        input_channel = 32
+        for t, c, n, s in self.configs:
+            for i in range(n):
+                stride = s if i == 0 else 1
+                layers.append(InvertedBlock(ch_in=input_channel, ch_out=c, expand_ratio=t, stride=stride))
+                input_channel = c
+
+        self.layers = nn.Sequential(*layers)
+
+        self.last_conv = conv1x1(input_channel, 1280)
+
+        self.classifier = nn.Sequential(
+            nn.Dropout2d(0.2),
+            nn.Linear(1280, n_classes)
+        )
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+
+    def forward(self, x):
+        x = self.stem_conv(x)
+        x = self.layers(x)
+        x = self.last_conv(x)
+        x = self.avg_pool(x).view(-1, 1280)
+        x = self.classifier(x)
+        return x
