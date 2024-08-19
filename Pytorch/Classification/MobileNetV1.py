@@ -1,13 +1,19 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torchvision
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+
+
 class DepSepConv(nn.Module):
     def __init__(self, in_dim, out_dim, stride=1):
         super().__init__()
-
         self.depthwise = nn.Sequential(
             nn.Conv2d(in_dim, in_dim, 3, stride=stride, padding=1, groups=in_dim, bias=False),
             nn.BatchNorm2d(in_dim),
             nn.ReLU6(),
         )
-
         self.pointwise = nn.Sequential(
             nn.Conv2d(in_dim, out_dim, 1, stride=1, padding=0, bias=False),
             nn.BatchNorm2d(out_dim),
@@ -47,10 +53,6 @@ class MobileNetV1(nn.Module):
             DepSepConv(int(512 * alpha), int(512 * alpha), stride=1),
             DepSepConv(int(512 * alpha), int(512 * alpha), stride=1),
         )
-        # self.conv5 = nn.Sequential(
-        #     DepSepConv(int(256 * alpha), int(512 * alpha), stride=2),
-        #     *[DepSepConv(int(512 * alpha), int(512 * alpha)) for _ in range(5)]
-        # )
         self.conv6 = nn.Sequential(
             DepSepConv(int(512 * alpha), int(1024 * alpha), stride=2),
             DepSepConv(int(1024 * alpha), int(1024 * alpha))
@@ -65,8 +67,69 @@ class MobileNetV1(nn.Module):
         x = self.conv4(x)
         x = self.conv5(x)
         x = self.conv6(x)
-
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
         return x
+
+
+transform_train = transforms.Compose([
+    transforms.RandomCrop(32, padding=4),
+    transforms.RandomHorizontalFlip(),
+    transforms.ToTensor(),
+    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+])
+
+transform_test = transforms.Compose([
+    transforms.ToTensor(),
+    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+])
+
+trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
+trainloader = DataLoader(trainset, batch_size=128, shuffle=True, num_workers=2)
+
+testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
+testloader = DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model = MobileNetV1(alpha=1.0).to(device)
+
+criterion = nn.CrossEntropyLoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+num_epochs = 10
+
+for epoch in range(num_epochs):
+    model.train()
+    running_loss = 0.0
+    for i, data in enumerate(trainloader, 0):
+        inputs, labels = data
+        inputs, labels = inputs.to(device), labels.to(device)
+
+        optimizer.zero_grad()
+
+        outputs = model(inputs)
+        loss = criterion(outputs, labels)
+        loss.backward()
+        optimizer.step()
+
+        running_loss += loss.item()
+        if i % 100 == 99:
+            print(f'[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss / 100:.3f}')
+            running_loss = 0.0
+
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for data in testloader:
+            images, labels = data
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    print(f'Epoch {epoch + 1} Accuracy: {100 * correct / total:.2f}%')
+
+print('Finished Training')
