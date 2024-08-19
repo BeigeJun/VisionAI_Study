@@ -27,7 +27,7 @@ class DepSepConv(nn.Module):
 
 
 class MobileNetV1(nn.Module):
-    def __init__(self, alpha, num_classes=10):
+    def __init__(self, alpha=1.0, num_classes=10):
         super().__init__()
 
         self.conv1 = nn.Sequential(
@@ -73,63 +73,66 @@ class MobileNetV1(nn.Module):
         return x
 
 
-transform_train = transforms.Compose([
-    transforms.RandomCrop(32, padding=4),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
+def main():
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ])
 
-transform_test = transforms.Compose([
-    transforms.ToTensor(),
-    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-])
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ])
 
-trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
-trainloader = DataLoader(trainset, batch_size=128, shuffle=True, num_workers=2)
+    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
+    trainloader = DataLoader(trainset, batch_size=128, shuffle=True, num_workers=2)
+    testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
+    testloader = DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
 
-testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
-testloader = DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = MobileNetV1(alpha=1.0).to(device)
+    model = MobileNetV1(alpha=1.0).to(device)
 
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    num_epochs = 10
 
-num_epochs = 10
+    for epoch in range(num_epochs):
+        model.train()
+        running_loss = 0.0
+        for i, data in enumerate(trainloader, 0):
+            inputs, labels = data
+            inputs, labels = inputs.to(device), labels.to(device)
 
-for epoch in range(num_epochs):
-    model.train()
-    running_loss = 0.0
-    for i, data in enumerate(trainloader, 0):
-        inputs, labels = data
-        inputs, labels = inputs.to(device), labels.to(device)
+            optimizer.zero_grad()
 
-        optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
 
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
-        loss.backward()
-        optimizer.step()
+            running_loss += loss.item()
+            if i % 100 == 99:
+                print(f'[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss / 100:.3f}')
+                running_loss = 0.0
 
-        running_loss += loss.item()
-        if i % 100 == 99:
-            print(f'[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss / 100:.3f}')
-            running_loss = 0.0
+        model.eval()
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for data in testloader:
+                images, labels = data
+                images, labels = images.to(device), labels.to(device)
+                outputs = model(images)
+                _, predicted = torch.max(outputs.data, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
 
-    model.eval()
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for data in testloader:
-            images, labels = data
-            images, labels = images.to(device), labels.to(device)
-            outputs = model(images)
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+        print(f'Epoch {epoch + 1} Accuracy: {100 * correct / total:.2f}%')
 
-    print(f'Epoch {epoch + 1} Accuracy: {100 * correct / total:.2f}%')
+    print('Finished Training')
 
-print('Finished Training')
+if __name__ == '__main__':
+    main()
