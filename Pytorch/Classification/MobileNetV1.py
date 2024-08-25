@@ -4,6 +4,7 @@ import torch.optim as optim
 import torchvision
 import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
+import optuna
 
 
 class DepSepConv(nn.Module):
@@ -73,7 +74,7 @@ class MobileNetV1(nn.Module):
         return x
 
 
-def main():
+def objective(trial):
     transform_train = transforms.Compose([
         transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
@@ -93,12 +94,20 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    model = MobileNetV1(alpha=1.0).to(device)
+    alpha = trial.suggest_float("alpha", 0.5, 1.5)
+    lr = trial.suggest_float("lr", 1e-4, 1e-2, log=True)
+    optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "SGD"])
+
+    model = MobileNetV1(alpha=alpha).to(device)
 
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
-    num_epochs = 10
 
+    if optimizer_name == "Adam":
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+    else:
+        optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+
+    num_epochs = 10
     for epoch in range(num_epochs):
         model.train()
         running_loss = 0.0
@@ -114,9 +123,6 @@ def main():
             optimizer.step()
 
             running_loss += loss.item()
-            if i % 100 == 99:
-                print(f'[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss / 100:.3f}')
-                running_loss = 0.0
 
         model.eval()
         correct = 0
@@ -130,9 +136,19 @@ def main():
                 total += labels.size(0)
                 correct += (predicted == labels).sum().item()
 
-        print(f'Epoch {epoch + 1} Accuracy: {100 * correct / total:.2f}%')
+    accuracy = 100 * correct / total
+    return accuracy
 
-    print('Finished Training')
+
+def main():
+    study = optuna.create_study(direction="maximize")
+    study.optimize(objective, n_trials=50)
+
+    print("Best trial:")
+    trial = study.best_trial
+    print(f"  Accuracy: {trial.value}")
+    print("  Best hyperparameters: ", trial.params)
+
 
 if __name__ == '__main__':
     main()
