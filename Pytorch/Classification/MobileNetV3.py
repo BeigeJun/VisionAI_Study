@@ -1,6 +1,9 @@
+import torch
 import torch.nn as nn
-from torchsummary import summary
-
+import torch.optim as optim
+import torchvision
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
 
 def _make_divisible(v, divisor=8, min_value=None):
     if min_value is None:
@@ -10,7 +13,6 @@ def _make_divisible(v, divisor=8, min_value=None):
         new_v += divisor
     return int(new_v)
 
-
 class h_swish(nn.Module):
     def __init__(self):
         super(h_swish, self).__init__()
@@ -18,7 +20,6 @@ class h_swish(nn.Module):
 
     def forward(self, x):
         return x * (self.relu6(x + 3) / 6)
-
 
 class inverted_residual_block(nn.Module):
     def __init__(self, i, t, o, k, s, re=False, se=False):
@@ -72,7 +73,6 @@ class inverted_residual_block(nn.Module):
             out += x
 
         return out
-
 
 class mobilenetv3(nn.Module):
     def __init__(self, ver=0, w=1.0):
@@ -143,17 +143,74 @@ class mobilenetv3(nn.Module):
             nn.AdaptiveAvgPool2d(1),
             nn.Conv2d(out_channels * 6, last, 1, 1),
             h_swish(),
-            nn.Conv2d(last, 1000, 1, 1)
+            nn.Conv2d(last, 10, 1, 1)
         )
 
     def forward(self, x):
+        x = self.conv1(x)
+        x = self.stack(x)
+        x = self.last(x)
+        x = x.view(x.size(0), -1)
+        return x
 
-        out = self.conv1(x)
-        out = self.stack(out)
-        out = self.last(out)
-        out = out.view(out.size(0), -1)
+def main():
+    transform_train = transforms.Compose([
+        transforms.RandomCrop(32, padding=4),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ])
 
-        return out
+    transform_test = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ])
 
+    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform_train)
+    trainloader = DataLoader(trainset, batch_size=128, shuffle=True, num_workers=2)
+    testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform_test)
+    testloader = DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
 
-summary(mobilenetv3(), (3, 224, 224))
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = mobilenetv3(ver=0, w=1.0).to(device)
+    criterion = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    num_epochs = 100
+
+    for epoch in range(num_epochs):
+        model.train()
+        running_loss = 0.0
+        for i, data in enumerate(trainloader, 0):
+            inputs, labels = data
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+
+            outputs = model(inputs)
+            loss = criterion(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+            if i % 100 == 99:
+                print(f'[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss / 100:.3f}')
+                running_loss = 0.0
+
+        model.eval()
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for data in testloader:
+                images, labels = data
+                images, labels = images.to(device), labels.to(device)
+                outputs = model(images)
+                _, predicted = torch.max(outputs.data, 1)
+                total += labels.size(0)
+                correct += (predicted == labels).sum().item()
+
+        print(f'Epoch {epoch + 1} Accuracy: {100 * correct / total:.2f}%')
+
+    print('Finished Training')
+
+if __name__ == '__main__':
+    main()
