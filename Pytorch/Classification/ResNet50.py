@@ -1,3 +1,11 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import torchvision
+import torchvision.transforms as transforms
+from torch.utils.data import DataLoader
+
+
 def conv_1_block(in_dim, out_dim, activation, stride=1):
     model = nn.Sequential(
         nn.Conv2d(in_dim, out_dim, kernel_size=1, stride=stride),
@@ -42,20 +50,19 @@ class BottleNeck(nn.Module):
             out = out + downsample
         else:
             out = self.layer(x)
-            if x.size() is not out.size():
+            if x.size() != out.size():
                 x = self.dim_equalizer(x)
             out = out + x
         return out
 
-
 class ResNet(nn.Module):
-    def __init__(self, base_dim = 64, num_classes=3):
+    def __init__(self, base_dim=64, num_classes=10):
         super(ResNet, self).__init__()
         self.activation = nn.ReLU()
         self.layer_1 = nn.Sequential(
-            nn.Conv2d(3, base_dim, 7, 2, 3),
+            nn.Conv2d(3, base_dim, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(base_dim),
             nn.ReLU(),
-            nn.MaxPool2d(3, 2, 1),
         )
         self.layer_2 = nn.Sequential(
             BottleNeck(base_dim, base_dim, base_dim * 4, self.activation),
@@ -93,13 +100,59 @@ class ResNet(nn.Module):
         out = self.avgpool(out)
         out = torch.flatten(out, 1)
         out = self.fc_layer(out)
-
         return out
 
+if __name__ == '__main__':
+    transform = transforms.Compose([
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomCrop(32, padding=4),
+        transforms.ToTensor(),
+        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+    ])
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    trainset = torchvision.datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
+    trainloader = DataLoader(trainset, batch_size=128, shuffle=True, num_workers=2)
 
-model = ResNet().to(device)
+    testset = torchvision.datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
+    testloader = DataLoader(testset, batch_size=100, shuffle=False, num_workers=2)
 
-loss_func = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    model = ResNet().to(device)
+    loss_func = nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+
+    for epoch in range(10):
+        model.train()
+        running_loss = 0.0
+        for i, data in enumerate(trainloader, 0):
+            inputs, labels = data
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = loss_func(outputs, labels)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+            if i % 100 == 99:
+                print(f"[Epoch {epoch + 1}, Batch {i + 1}] loss: {running_loss / 100:.3f}")
+                running_loss = 0.0
+
+    print("Finished Training")
+    
+    model.eval()
+    correct = 0
+    total = 0
+    with torch.no_grad():
+        for data in testloader:
+            images, labels = data
+            images, labels = images.to(device), labels.to(device)
+            outputs = model(images)
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    print(f"Accuracy of the network on the 10000 test images: {100 * correct / total:.2f}%")
