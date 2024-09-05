@@ -100,3 +100,28 @@ test_loader = torch.utils.data.DataLoader(dataset=test_dataset,
                                           batch_size=batch_size,
                                           num_workers=4,
                                           collate_fn=collate_fn)
+
+
+numOfSample = 3
+fig, axes = plt.subplots(nrows=numOfSample, ncols=2, figsize=(15, 15))
+tmp_imgs = []
+tmp_masks = []
+coco = COCO('/content/gdrive/My Drive/baseline_code/input/data/train.json')
+
+for imgs, masks, image_infos in train_loader:
+    for idx in range(numOfSample):
+      tmp_info = []
+      for anns in coco.loadAnns(coco.getAnnIds(image_infos[idx]['id'])) :
+        if [anns['category_id'],train_dataset.classNameList[anns['category_id']]] not in tmp_info:
+          tmp_info.append([anns['category_id'],train_dataset.classNameList[anns['category_id']]])
+      print(idx,'번째 이미지에 포함된 labels :',tmp_info)
+      axes[idx][0].imshow(imgs[idx].permute([1,2,0]))
+      axes[idx][0].grid(False)
+      axes[idx][0].set_title("input image : {}".format(image_infos[idx]['file_name']), fontsize = 15)
+
+      axes[idx][1].imshow(masks[idx])
+      axes[idx][1].grid(False)
+      axes[idx][1].set_title("input image : {}".format(image_infos[idx]['file_name']), fontsize = 15)
+    break
+
+plt.show()
