@@ -6,10 +6,7 @@ from torchvision.datasets import MNIST
 from torchvision.transforms import ToTensor
 from torch.utils.data import DataLoader
 import pandas as pd
-from sklearn.decomposition import PCA
-import plotly.express as px
-from torchvision.transforms import functional as tvf
-from torchvision.utils import make_grid
+from sklearn.metrics import accuracy_score
 
 # RSR Layer implementation
 class RSRLayer(nn.Module):
@@ -126,72 +123,37 @@ class RSRAE(pl.LightningModule):
 if __name__ == "__main__":
     pl.seed_everything(666)
 
-    ds = RSRDs(target_class=4, other_classes=(0, 1, 2, 8), n_examples_per_other=100)
-    dl = DataLoader(ds, batch_size=64, shuffle=True, drop_last=True)
+    train_ds = RSRDs(target_class=4, other_classes=(0, 1, 2, 8), n_examples_per_other=100)
+    train_dl = DataLoader(train_ds, batch_size=64, shuffle=True, drop_last=True)
+
+    val_ds = RSRDs(target_class=4, other_classes=(0, 1, 2, 8), n_examples_per_other=20)
+    val_dl = DataLoader(val_ds, batch_size=64, shuffle=False)
 
     hparams = dict(
-        d=16, D=128, input_dim=28*28,
+        d=32, D=1024, input_dim=28*28,
         lr=0.01,
-        epochs=150, steps_per_epoch=len(dl),
+        epochs=10000, steps_per_epoch=len(train_dl),
         lambda1=1.0, lambda2=1.0,
     )
 
     model = RSRAE(hparams)
     trainer = pl.Trainer(max_epochs=hparams['epochs'], accelerator="gpu", devices=1)
-    trainer.fit(model, dl)
+    trainer.fit(model, train_dl)
 
-    # Analysis
-    model.freeze()
 
-    def reconstruct(x, model):
-        enc, x_hat, latent, A = model(x.view(1, -1))
-        x_hat = torch.sigmoid(x_hat)
-        return tvf.to_pil_image(make_grid([x_hat.squeeze(0).view(1, 28, 28), x]))
+    model.eval()
+    all_preds = []
+    all_labels = []
 
-    tvf.to_pil_image(
-        make_grid([tvf.to_tensor(reconstruct(ds[i][0], model)) for i in torch.randint(0, len(ds), (8,))], nrow=1)
-    )
+    with torch.no_grad():
+        for batch in val_dl:
+            X, y = batch
+            x = X.view(X.size(0), -1)
+            _, x_hat, _, _ = model(x)
+            rec_error = torch.norm(x - torch.sigmoid(x_hat), dim=1)
+            preds = (rec_error > rec_error.mean()).int()
+            all_preds.extend(preds.cpu().numpy())
+            all_labels.extend((y == 4).int().cpu().numpy())
 
-    rsr_embeddings = []
-    classes = []
-    errors = []
-
-    for batch in iter(DataLoader(ds, batch_size=64, shuffle=False)):
-        X, cl = batch
-        x = X.view(X.size(0), -1)
-        enc, x_hat, latent, A = model(x)
-        rsr_embeddings.append(latent)
-        classes.extend(cl.numpy())
-        for i in range(X.size(0)):
-            rec_error = L2p_Loss()(torch.sigmoid(x_hat[i]).unsqueeze(0), x[i].unsqueeze(0))
-            errors.append(float(rec_error.numpy()))
-
-    all_embs = torch.vstack(rsr_embeddings)
-    df = pd.DataFrame(all_embs.numpy(), columns=["x", "y", "z"] + [f"dim_{i}" for i in range(hparams["d"] - 3)])
-    df.loc[:, "class"] = classes
-    df.loc[:, "errors"] = errors
-
-    pca = PCA(n_components=3)
-    rsr_3d = pd.DataFrame(pca.fit_transform(all_embs), columns=["x", "y", "z"])
-    rsr_3d.loc[:, "class"] = classes
-
-    fig = px.scatter_3d(df, x='x', y='y', z='z', symbol="class", color="class", opacity=0.95)
-    fig.update_layout(margin=dict(l=0, r=0, b=0, t=0))
-    fig.show()
-
-    print(df.errors.describe())
-
-    df.groupby("class").errors.hist(legend=True, bins=60, figsize=(12, 12))
-
-    lowest_mistakes = df.sort_values(by="errors", ascending=True).head(60).loc[:, ["errors", "class"]]
-    highest_mistakes = df.sort_values(by="errors", ascending=False).head(60).loc[:, ["errors", "class"]]
-
-    print("Images with the highest reconstruction loss")
-    tvf.to_pil_image(
-        make_grid([tvf.to_tensor(reconstruct(ds[i][0], model)) for i in highest_mistakes.index], nrow=6, pad_value=0.5)
-    )
-
-    print("Images with the lowest reconstruction loss")
-    tvf.to_pil_image(
-        make_grid([tvf.to_tensor(reconstruct(ds[i][0], model)) for i in lowest_mistakes.index], nrow=6, pad_value=0.5)
-    )
+    accuracy = accuracy_score(all_labels, all_preds)
+    print(f"Validation Accuracy: {accuracy:.4f}")
