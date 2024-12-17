@@ -1,169 +1,349 @@
-import os
 import numpy as np
+import easydict
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
+from torch.utils import data
+from torch.utils.data import DataLoader
 from torchvision import transforms
 from PIL import Image
 from sklearn.metrics import roc_auc_score
+import os
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 
-class CustomImageDataset(Dataset):
-    def __init__(self, image_dir, transform=None, is_train=True):
-        self.image_dir = image_dir
-        self.is_train = is_train
+class CustomDataset(data.Dataset):
+    def __init__(self, root_dir, transform=None, is_train=True):
+        self.root_dir = root_dir
         self.transform = transform
+        self.is_train = is_train
+        self.images = []
+        self.labels = []
 
-        if self.is_train:
-            self.image_paths = [os.path.join(image_dir, 'OK', fname) for fname in
-                                os.listdir(os.path.join(image_dir, 'OK')) if fname.endswith(('.png', '.jpg', '.jpeg'))]
+        if is_train:
+            ok_folder = os.path.join(root_dir, 'Train', 'OK')
+            self._add_images(ok_folder, 0)
         else:
-            self.image_paths = []
-            for label in ['OK', 'NG']:
-                self.image_paths.extend(
-                    [os.path.join(image_dir, label, fname) for fname in os.listdir(os.path.join(image_dir, label)) if
-                     fname.endswith(('.png', '.jpg', '.jpeg'))])
+            ok_folder = os.path.join(root_dir, 'Test', 'OK')
+            ng_folder = os.path.join(root_dir, 'Test', 'NG')
+            self._add_images(ok_folder, 0)
+            self._add_images(ng_folder, 1)
+
+    def _add_images(self, folder, label):
+        for img_name in os.listdir(folder):
+            img_path = os.path.join(folder, img_name)
+            self.images.append(img_path)
+            self.labels.append(label)
 
     def __len__(self):
-        return len(self.image_paths)
+        return len(self.images)
 
     def __getitem__(self, idx):
-        img_path = self.image_paths[idx]
-        image = Image.open(img_path).convert("L")
-        if self.is_train:
-            label = 0
-        else:
-            label = 0 if 'OK' in img_path else 1
+        img_path = self.images[idx]
+        image = Image.open(img_path).convert('RGB')
+        label = self.labels[idx]
+
         if self.transform:
             image = self.transform(image)
+
         return image, label
 
 
-def get_custom_dataloader(train_dir, test_dir, batch_size, img_size=224):
+def get_data_loaders(args):
     transform = transforms.Compose([
-        transforms.Resize((img_size, img_size)),
+        transforms.Resize((512, 512)),
         transforms.ToTensor(),
-        transforms.Normalize((0.5,), (0.5,))
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
 
-    train_dataset = CustomImageDataset(train_dir, transform=transform, is_train=True)
-    test_dataset = CustomImageDataset(test_dir, transform=transform, is_train=False)
+    train_dataset = CustomDataset(args.data_dir, transform=transform, is_train=True)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+    test_dataset = CustomDataset(args.data_dir, transform=transform, is_train=False)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
     return train_loader, test_loader
 
 
-class DeepSVDDNetwork(nn.Module):
+class DeepSVDD_network(nn.Module):
     def __init__(self, z_dim=32):
-        super(DeepSVDDNetwork, self).__init__()
-        self.conv1 = nn.Conv2d(1, 8, kernel_size=5, padding=2)
-        self.bn1 = nn.BatchNorm2d(8, eps=1e-04, affine=False)
-        self.conv2 = nn.Conv2d(8, 4, kernel_size=5, padding=2)
-        self.bn2 = nn.BatchNorm2d(4, eps=1e-04, affine=False)
-        self.fc1 = nn.Linear(4 * 56 * 56, z_dim)
+        super(DeepSVDD_network, self).__init__()
+        self.pool = nn.MaxPool2d(2, 2)
+        self.conv1 = nn.Conv2d(3, 32, 5, bias=False, padding=2)
+        self.bn1 = nn.BatchNorm2d(32, eps=1e-04, affine=False)
+        self.conv2 = nn.Conv2d(32, 64, 5, bias=False, padding=2)
+        self.bn2 = nn.BatchNorm2d(64, eps=1e-04, affine=False)
+        self.conv3 = nn.Conv2d(64, 128, 5, bias=False, padding=2)
+        self.bn3 = nn.BatchNorm2d(128, eps=1e-04, affine=False)
+        self.fc1 = nn.Linear(128 * 64 * 64, z_dim, bias=False)
 
     def forward(self, x):
-        x = F.max_pool2d(F.leaky_relu(self.bn1(self.conv1(x))), 2)
-        x = F.max_pool2d(F.leaky_relu(self.bn2(self.conv2(x))), 2)
+        x = self.conv1(x)
+        x = self.pool(F.leaky_relu(self.bn1(x)))
+        x = self.conv2(x)
+        x = self.pool(F.leaky_relu(self.bn2(x)))
+        x = self.conv3(x)
+        x = self.pool(F.leaky_relu(self.bn3(x)))
         x = x.view(x.size(0), -1)
         return self.fc1(x)
 
+class pretrain_autoencoder(nn.Module):
+    def __init__(self, z_dim=32):
+        super(pretrain_autoencoder, self).__init__()
+        self.z_dim = z_dim
+        self.encoder = DeepSVDD_network(z_dim)
+        self.decoder = nn.Sequential(
+            nn.Linear(z_dim, 128 * 64 * 64),
+            nn.ReLU(True),
+            nn.Unflatten(1, (128, 64, 64)),
+            nn.ConvTranspose2d(128, 64, 5, stride=2, padding=2, output_padding=1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(64, 32, 5, stride=2, padding=2, output_padding=1),
+            nn.ReLU(True),
+            nn.ConvTranspose2d(32, 3, 5, stride=2, padding=2, output_padding=1),
+            nn.Tanh()
+        )
+
+    def forward(self, x):
+        z = self.encoder(x)
+        x_hat = self.decoder(z)
+        return x_hat
+
 
 class TrainerDeepSVDD:
-    def __init__(self, network, dataloader_train, device):
-        self.network = network.to(device)
-        self.dataloader_train = dataloader_train
+    def __init__(self, args, data_loader, device):
+        self.args = args
+        self.train_loader = data_loader
         self.device = device
 
-    def train(self, num_epochs=50, lr=1e-3):
-        c = torch.randn(self.network.fc1.out_features).to(self.device)
-        optimizer = torch.optim.Adam(self.network.parameters(), lr=lr)
+    def pretrain(self):
+        ae = pretrain_autoencoder(self.args.latent_dim).to(self.device)
+        ae.apply(weights_init_normal)
+        optimizer = torch.optim.Adam(ae.parameters(), lr=self.args.lr_ae, weight_decay=self.args.weight_decay_ae)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=self.args.lr_milestones, gamma=0.1)
 
-        for epoch in range(num_epochs):
-            total_loss = 0.0
-            for images, _ in self.dataloader_train:
-                images = images.to(self.device)
+        ae.train()
+        pbar = tqdm(range(self.args.num_epochs_ae), desc="Pretraining Autoencoder")
+        for epoch in pbar:
+            total_loss = 0
+            for x, _ in self.train_loader:
+                x = x.float().to(self.device)
                 optimizer.zero_grad()
-                outputs = self.network(images)
-                loss = torch.mean(torch.sum((outputs - c) ** 2, dim=1))
+                x_hat = ae(x)
+                reconst_loss = F.mse_loss(x_hat, x)
+                reconst_loss.backward()
+                optimizer.step()
+                total_loss += reconst_loss.item()
+            scheduler.step()
+
+            pbar.set_postfix({'Loss': f'{total_loss / len(self.train_loader):.3f}'})
+
+        self.save_weights_for_DeepSVDD(ae, self.train_loader)
+
+    def train(self):
+        net = DeepSVDD_network().to(self.device)
+        if self.args.pretrain:
+            state_dict = torch.load('pretrained_parameters.pth')
+            net.load_state_dict(state_dict['net_dict'])
+            c = torch.Tensor(state_dict['center']).to(self.device)
+        else:
+            net.apply(weights_init_normal)
+            c = torch.randn(self.args.latent_dim).to(self.device)
+
+        optimizer = torch.optim.Adam(net.parameters(), lr=self.args.lr, weight_decay=self.args.weight_decay)
+        scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=self.args.lr_milestones, gamma=0.1)
+
+        net.train()
+        pbar = tqdm(range(self.args.num_epochs), desc="Training Deep SVDD")
+        for epoch in pbar:
+            total_loss = 0
+            for x, _ in self.train_loader:
+                x = x.float().to(self.device)
+                optimizer.zero_grad()
+                z = net(x)
+                loss = torch.mean(torch.sum((z - c) ** 2, dim=1))
                 loss.backward()
                 optimizer.step()
                 total_loss += loss.item()
+            scheduler.step()
 
-            print(
-                f"Training Deep SVDD... Epoch {epoch + 1}/{num_epochs}, Loss: {total_loss / len(self.dataloader_train):.4f}")
+            pbar.set_postfix({'Loss': f'{total_loss / len(self.train_loader):.3f}'})
 
+        self.net = net
+        self.c = c
+        return self.net, self.c
+
+    def save_weights_for_DeepSVDD(self, model, dataloader):
+        c = self.set_c(model, dataloader)
+        net = DeepSVDD_network(self.args.latent_dim).to(self.device)
+        state_dict = model.encoder.state_dict()
+        net.load_state_dict(state_dict)
+        torch.save({'center': c.cpu().data.numpy().tolist(),
+                    'net_dict': net.state_dict()}, 'pretrained_parameters.pth')
+
+    def set_c(self, model, dataloader, eps=0.1):
+        model.eval()
+        z_ = []
+        with torch.no_grad():
+            for x, _ in dataloader:
+                x = x.float().to(self.device)
+                z = model.encoder(x)
+                z_.append(z.detach())
+        z_ = torch.cat(z_)
+        c = torch.mean(z_, dim=0)
+        c[(abs(c) < eps) & (c < 0)] = -eps
+        c[(abs(c) < eps) & (c > 0)] = eps
         return c
 
 
-def evaluate(network, c, dataloader_test, device):
-    network.eval()
+def weights_init_normal(m):
+    classname = m.__class__.__name__
+    if hasattr(m, 'weight') and m.weight is not None:
+        if classname.find("Conv") != -1:
+            torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
+        elif classname.find("BatchNorm") != -1:
+            torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
+            if m.bias is not None:
+                torch.nn.init.constant_(m.bias.data, 0.0)
+        elif classname.find("Linear") != -1:
+            torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
+            if m.bias is not None:
+                torch.nn.init.constant_(m.bias.data, 0.0)
+
+
+def eval(net, c, dataloader, device):
+    scores = []
+    labels = []
+    net.eval()
+    print('Testing...')
+    with torch.no_grad():
+        for x, y in dataloader:
+            x = x.float().to(device)
+            z = net(x)
+            score = torch.sum((z - c) ** 2, dim=1)
+            scores.append(score.detach().cpu())
+            labels.append(y.cpu())
+
+    labels, scores = torch.cat(labels).numpy(), torch.cat(scores).numpy()
+    print('ROC AUC score: {:.2f}'.format(roc_auc_score(labels, scores) * 100))
+    return labels, scores
+
+
+def eval(net, c, dataloader, device):
     scores = []
     labels = []
     images = []
-
+    net.eval()
+    print('Testing...')
     with torch.no_grad():
-        for image, label in dataloader_test:
-            image = image.to(device)
-            outputs = network(image)
-            score = torch.sum((outputs - c) ** 2, dim=1).cpu().numpy()
-            scores.extend(score)
-            labels.extend(label.numpy())
-            images.extend(image.cpu().numpy())
+        for x, y in dataloader:
+            x = x.float().to(device)
+            z = net(x)
+            score = torch.sum((z - c) ** 2, dim=1)
+            scores.append(score.detach().cpu())
+            labels.append(y.cpu())
+            images.append(x.cpu())
 
-    auc_score = roc_auc_score(labels, scores)
-    print(f"ROC AUC Score: {auc_score:.4f}")
+    labels = torch.cat(labels).numpy()
+    scores = torch.cat(scores).numpy()
+    images = torch.cat(images).numpy()
 
-    show_results(images, labels, scores)
+    threshold = np.percentile(scores, 90)
+    predicted_labels = (scores > threshold).astype(int)
 
-    return auc_score
+    correct = np.sum(predicted_labels == labels)
+    incorrect = np.sum(predicted_labels != labels)
+
+    print('ROC AUC score: {:.2f}'.format(roc_auc_score(labels, scores) * 100))
+    print('Basic score: {:.2f}'.format(correct/(correct+incorrect)*100))
+    print(f'맞은 개수: {correct}, 틀린 개수: {incorrect}')
+
+    return labels, scores, images, predicted_labels
 
 
-def show_results(images, labels, scores):
-    threshold = np.mean(scores)
-    predicted_labels = (np.array(scores) > threshold).astype(int)
+def visualize_results(images, labels, scores, predicted_labels, batch_size=25):
+    mean = np.array([0.485, 0.456, 0.406])
+    std = np.array([0.229, 0.224, 0.225])
+    images = std * images.transpose(0, 2, 3, 1) + mean
+    images = np.clip(images, 0, 1)
 
-    for i in range(0, len(images), 10):
-        batch_images = images[i:i + 10]
-        batch_labels = labels[i:i + 10]
-        batch_predictions = predicted_labels[i:i + 10]
+    num_images = len(images)
+    num_batches = (num_images + batch_size - 1) // batch_size
 
-        fig, axes = plt.subplots(2, 5, figsize=(15, 6))
-        axes = axes.ravel()
+    for batch in range(num_batches):
+        start_idx = batch * batch_size
+        end_idx = min((batch + 1) * batch_size, num_images)
 
-        for j, (img, label, pred) in enumerate(zip(batch_images, batch_labels, batch_predictions)):
-            axes[j].imshow(img.squeeze(), cmap='gray')
-            axes[j].set_title(f"Label: {label}, Pre: {pred}")
-            axes[j].axis('off')
+        fig, axes = plt.subplots(5, 5, figsize=(15, 15))
+        for i, ax in enumerate(axes.flat):
+            idx = start_idx + i
+            if idx < end_idx:
+                ax.imshow(images[idx])
+                ax.axis('off')
+                color = 'green' if predicted_labels[idx] == labels[idx] else 'red'
+                ax.set_title(f'Pred: {predicted_labels[idx]}, True: {labels[idx]}', color=color)
+            else:
+                ax.axis('off')
 
         plt.tight_layout()
         plt.show()
 
 
-if __name__ == "__main__":
-    train_dir = "C:/Users/wns20/PycharmProjects/VisionAI_Study/2.Anomaly_Detection/ImageData/Train"
-    test_dir = "C:/Users/wns20/PycharmProjects/VisionAI_Study/2.Anomaly_Detection/ImageData/Test"
+def visualize_results(images, labels, scores, predicted_labels, batch_size=25):
+    mean = np.array([0.485, 0.456, 0.406])
+    std = np.array([0.229, 0.224, 0.225])
+    images = std * images.transpose(0, 2, 3, 1) + mean
+    images = np.clip(images, 0, 1)
 
-    batch_size = 32
-    img_size = 224
-    latent_dim = 32
-    num_epochs_train = 50
+    num_images = len(images)
+    if num_images == 0 or batch_size == 0:
+        print("No images to visualize or invalid batch size.")
+        return
 
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
+    num_batches = max(1, (num_images + batch_size - 1) // batch_size)
 
-    dataloader_train, dataloader_test = get_custom_dataloader(train_dir, test_dir, batch_size=batch_size,
-                                                              img_size=img_size)
+    for batch in range(num_batches):
+        start_idx = batch * batch_size
+        end_idx = min((batch + 1) * batch_size, num_images)
 
-    network = DeepSVDDNetwork(z_dim=latent_dim).to(device)
-    trainer = TrainerDeepSVDD(network, dataloader_train, device)
+        fig, axes = plt.subplots(5, 5, figsize=(15, 15))
+        for i, ax in enumerate(axes.flat):
+            idx = start_idx + i
+            if idx < end_idx:
+                ax.imshow(images[idx])
+                ax.axis('off')
+                color = 'green' if predicted_labels[idx] == labels[idx] else 'red'
+                ax.set_title(f'Pred: {predicted_labels[idx]}, True: {labels[idx]}', color=color)
+            else:
+                ax.axis('off')
 
-    print("Training Deep SVDD...")
-    c_center = trainer.train(num_epochs=num_epochs_train)
+        plt.tight_layout()
+        plt.show()
 
-    print("Evaluating Deep SVDD...")
-    evaluate(network, c_center, dataloader_test, device)
+
+if __name__ == '__main__':
+    args = easydict.EasyDict({
+        'num_epochs': 200,
+        'num_epochs_ae': 200,
+        'lr': 1e-3,
+        'lr_ae': 1e-2,
+        'weight_decay': 5e-7,
+        'weight_decay_ae': 5e-3,
+        'lr_milestones': [50],
+        'batch_size': 8,
+        'pretrain': True,
+        'latent_dim': 32,
+        'data_dir': 'D:/open/Use/bottle_dataset'
+    })
+
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    dataloader_train, dataloader_test = get_data_loaders(args)
+    deep_SVDD = TrainerDeepSVDD(args, dataloader_train, device)
+
+    if args.pretrain:
+        deep_SVDD.pretrain()
+
+    net, c = deep_SVDD.train()
+    labels, scores, images, predicted_labels = eval(net, c, dataloader_test, device)
+    visualize_results(images, labels, scores, predicted_labels)
