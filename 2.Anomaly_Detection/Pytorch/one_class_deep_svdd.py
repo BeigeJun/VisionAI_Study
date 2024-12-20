@@ -12,7 +12,6 @@ import os
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 
-
 class CustomDataset(data.Dataset):
     def __init__(self, root_dir, transform=None, is_train=True):
         self.root_dir = root_dir
@@ -49,10 +48,9 @@ class CustomDataset(data.Dataset):
 
         return image, label
 
-
 def get_data_loaders(args):
     transform = transforms.Compose([
-        transforms.Resize((512, 512)),
+        transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
@@ -65,7 +63,6 @@ def get_data_loaders(args):
 
     return train_loader, test_loader
 
-
 class DeepSVDD_network(nn.Module):
     def __init__(self, z_dim=32):
         super(DeepSVDD_network, self).__init__()
@@ -76,7 +73,7 @@ class DeepSVDD_network(nn.Module):
         self.bn2 = nn.BatchNorm2d(64, eps=1e-04, affine=False)
         self.conv3 = nn.Conv2d(64, 128, 5, bias=False, padding=2)
         self.bn3 = nn.BatchNorm2d(128, eps=1e-04, affine=False)
-        self.fc1 = nn.Linear(128 * 64 * 64, z_dim, bias=False)
+        self.fc1 = nn.Linear(128 * 28 * 28, z_dim, bias=False)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -94,9 +91,9 @@ class pretrain_autoencoder(nn.Module):
         self.z_dim = z_dim
         self.encoder = DeepSVDD_network(z_dim)
         self.decoder = nn.Sequential(
-            nn.Linear(z_dim, 128 * 64 * 64),
+            nn.Linear(z_dim, 128 * 28 * 28),
             nn.ReLU(True),
-            nn.Unflatten(1, (128, 64, 64)),
+            nn.Unflatten(1, (128, 28, 28)),
             nn.ConvTranspose2d(128, 64, 5, stride=2, padding=2, output_padding=1),
             nn.ReLU(True),
             nn.ConvTranspose2d(64, 32, 5, stride=2, padding=2, output_padding=1),
@@ -109,7 +106,6 @@ class pretrain_autoencoder(nn.Module):
         z = self.encoder(x)
         x_hat = self.decoder(z)
         return x_hat
-
 
 class TrainerDeepSVDD:
     def __init__(self, args, data_loader, device):
@@ -136,8 +132,7 @@ class TrainerDeepSVDD:
                 optimizer.step()
                 total_loss += reconst_loss.item()
             scheduler.step()
-
-            pbar.set_postfix({'Loss': f'{total_loss / len(self.train_loader):.3f}'})
+            pbar.set_postfix({'Loss': f'{total_loss / len(self.train_loader):.10f}'})
 
         self.save_weights_for_DeepSVDD(ae, self.train_loader)
 
@@ -167,8 +162,7 @@ class TrainerDeepSVDD:
                 optimizer.step()
                 total_loss += loss.item()
             scheduler.step()
-
-            pbar.set_postfix({'Loss': f'{total_loss / len(self.train_loader):.3f}'})
+            pbar.set_postfix({'Loss': f'{total_loss / len(self.train_loader):.10f}'})
 
         self.net = net
         self.c = c
@@ -196,7 +190,6 @@ class TrainerDeepSVDD:
         c[(abs(c) < eps) & (c > 0)] = eps
         return c
 
-
 def weights_init_normal(m):
     classname = m.__class__.__name__
     if hasattr(m, 'weight') and m.weight is not None:
@@ -210,25 +203,6 @@ def weights_init_normal(m):
             torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
             if m.bias is not None:
                 torch.nn.init.constant_(m.bias.data, 0.0)
-
-
-def eval(net, c, dataloader, device):
-    scores = []
-    labels = []
-    net.eval()
-    print('Testing...')
-    with torch.no_grad():
-        for x, y in dataloader:
-            x = x.float().to(device)
-            z = net(x)
-            score = torch.sum((z - c) ** 2, dim=1)
-            scores.append(score.detach().cpu())
-            labels.append(y.cpu())
-
-    labels, scores = torch.cat(labels).numpy(), torch.cat(scores).numpy()
-    print('ROC AUC score: {:.2f}'.format(roc_auc_score(labels, scores) * 100))
-    return labels, scores
-
 
 def eval(net, c, dataloader, device):
     scores = []
@@ -251,7 +225,6 @@ def eval(net, c, dataloader, device):
 
     threshold = np.percentile(scores, 90)
     predicted_labels = (scores > threshold).astype(int)
-
     correct = np.sum(predicted_labels == labels)
     incorrect = np.sum(predicted_labels != labels)
 
@@ -260,35 +233,6 @@ def eval(net, c, dataloader, device):
     print(f'맞은 개수: {correct}, 틀린 개수: {incorrect}')
 
     return labels, scores, images, predicted_labels
-
-
-def visualize_results(images, labels, scores, predicted_labels, batch_size=25):
-    mean = np.array([0.485, 0.456, 0.406])
-    std = np.array([0.229, 0.224, 0.225])
-    images = std * images.transpose(0, 2, 3, 1) + mean
-    images = np.clip(images, 0, 1)
-
-    num_images = len(images)
-    num_batches = (num_images + batch_size - 1) // batch_size
-
-    for batch in range(num_batches):
-        start_idx = batch * batch_size
-        end_idx = min((batch + 1) * batch_size, num_images)
-
-        fig, axes = plt.subplots(5, 5, figsize=(15, 15))
-        for i, ax in enumerate(axes.flat):
-            idx = start_idx + i
-            if idx < end_idx:
-                ax.imshow(images[idx])
-                ax.axis('off')
-                color = 'green' if predicted_labels[idx] == labels[idx] else 'red'
-                ax.set_title(f'Pred: {predicted_labels[idx]}, True: {labels[idx]}', color=color)
-            else:
-                ax.axis('off')
-
-        plt.tight_layout()
-        plt.show()
-
 
 def visualize_results(images, labels, scores, predicted_labels, batch_size=25):
     mean = np.array([0.485, 0.456, 0.406])
@@ -302,7 +246,6 @@ def visualize_results(images, labels, scores, predicted_labels, batch_size=25):
         return
 
     num_batches = max(1, (num_images + batch_size - 1) // batch_size)
-
     for batch in range(num_batches):
         start_idx = batch * batch_size
         end_idx = min((batch + 1) * batch_size, num_images)
@@ -317,15 +260,13 @@ def visualize_results(images, labels, scores, predicted_labels, batch_size=25):
                 ax.set_title(f'Pred: {predicted_labels[idx]}, True: {labels[idx]}', color=color)
             else:
                 ax.axis('off')
-
         plt.tight_layout()
         plt.show()
 
-
 if __name__ == '__main__':
     args = easydict.EasyDict({
-        'num_epochs': 200,
-        'num_epochs_ae': 200,
+        'num_epochs': 1000,
+        'num_epochs_ae': 500,
         'lr': 1e-3,
         'lr_ae': 1e-2,
         'weight_decay': 5e-7,
@@ -334,7 +275,7 @@ if __name__ == '__main__':
         'batch_size': 8,
         'pretrain': True,
         'latent_dim': 32,
-        'data_dir': 'D:/open/Use/bottle_dataset'
+        'data_dir': 'D:/Anomaly/Use/bottle_dataset'
     })
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
