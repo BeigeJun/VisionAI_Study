@@ -11,6 +11,8 @@ from sklearn.metrics import roc_auc_score
 import os
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+
 
 class CustomDataset(data.Dataset):
     def __init__(self, root_dir, transform=None, is_train=True):
@@ -263,10 +265,57 @@ def visualize_results(images, labels, scores, predicted_labels, batch_size=25):
         plt.tight_layout()
         plt.show()
 
+
+def visualize_distribution(net, c, dataloader, device):
+    net.eval()
+    features = []
+    labels = []
+
+    with torch.no_grad():
+        for x, y in dataloader:
+            x = x.float().to(device)
+            z = net(x)
+            features.append(z.cpu().numpy())
+            labels.append(y.cpu().numpy())
+
+    features = np.concatenate(features, axis=0)
+    labels = np.concatenate(labels, axis=0)
+
+    pca = PCA(n_components=2)
+    features_2d = pca.fit_transform(features)
+
+    c_2d = pca.transform(c.cpu().numpy().reshape(1, -1))
+
+    plt.figure(figsize=(10, 8))
+    scatter = plt.scatter(features_2d[:, 0], features_2d[:, 1], c=labels, cmap='coolwarm', alpha=0.6)
+    plt.colorbar(scatter)
+
+    plt.scatter(c_2d[0, 0], c_2d[0, 1], c='yellow', s=200, marker='*', edgecolors='black', linewidth=1.5,
+                label='Center')
+
+    distances = np.sum((features - c.cpu().numpy()) ** 2, axis=1)
+    radius = np.percentile(distances, 90)
+
+    radius_2d = np.sqrt(radius) * np.mean(np.std(features_2d, axis=0))
+    circle = plt.Circle((c_2d[0, 0], c_2d[0, 1]), radius_2d, fill=False, color='green', linestyle='--',
+                        label='Radius (90th percentile)')
+    plt.gca().add_artist(circle)
+
+    plt.legend()
+    plt.title('DeepSVDD Feature Distribution')
+    plt.xlabel('PCA Component 1')
+    plt.ylabel('PCA Component 2')
+
+    plt.xlim(c_2d[0, 0] - radius_2d * 1.5, c_2d[0, 0] + radius_2d * 1.5)
+    plt.ylim(c_2d[0, 1] - radius_2d * 1.5, c_2d[0, 1] + radius_2d * 1.5)
+
+    plt.show()
+
+
 if __name__ == '__main__':
     args = easydict.EasyDict({
-        'num_epochs': 1000,
-        'num_epochs_ae': 500,
+        'num_epochs': 1,
+        'num_epochs_ae': 1,
         'lr': 1e-3,
         'lr_ae': 1e-2,
         'weight_decay': 5e-7,
@@ -286,5 +335,9 @@ if __name__ == '__main__':
         deep_SVDD.pretrain()
 
     net, c = deep_SVDD.train()
+
     labels, scores, images, predicted_labels = eval(net, c, dataloader_test, device)
+
     visualize_results(images, labels, scores, predicted_labels)
+
+    visualize_distribution(net, c, dataloader_test, device)
