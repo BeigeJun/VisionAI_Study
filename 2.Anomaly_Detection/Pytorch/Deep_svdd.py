@@ -314,8 +314,8 @@ def visualize_distribution(net, c, dataloader, device):
 
 if __name__ == '__main__':
     args = easydict.EasyDict({
-        'num_epochs': 1,
-        'num_epochs_ae': 1,
+        'num_epochs': 100,
+        'num_epochs_ae': 100,
         'lr': 1e-3,
         'lr_ae': 1e-2,
         'weight_decay': 5e-7,
@@ -324,7 +324,7 @@ if __name__ == '__main__':
         'batch_size': 8,
         'pretrain': True,
         'latent_dim': 32,
-        'data_dir': 'D:/Anomaly/Use/bottle_dataset'
+        'data_dir': 'D:/Anomaly/Use/metalnut_dataset'
     })
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')

@@ -2,15 +2,15 @@ import pandas as pd
 import os
 import shutil
 
-csv_path = 'D:/open/original/train_df.csv'
+csv_path = 'D:/Anomaly/Original/train_df.csv'
 df = pd.read_csv(csv_path)
 
 class_name = input("복사할 이미지의 클래스 이름을 입력하세요: ")
 
 good_images = df[(df['state'] == 'good') & (df['class'] == class_name)]
 
-source_dir = 'D:/open/train/train'
-target_dir = f'D:/open/{class_name}'
+source_dir = 'D:/Anomaly/Original/train/train'
+target_dir = f'D:/Anomaly/OK/{class_name}'
 
 if not os.path.exists(target_dir):
     os.makedirs(target_dir)

@@ -22,6 +22,6 @@ while running:
     # 백스페이스 누르기
     keyboard.press(Key.backspace)
     keyboard.release(Key.backspace)
-    time.sleep(1)  # 1초 대기
+    time.sleep(1)  # 1초 대
 
 print("프로그램이 종료되었습니다.")
