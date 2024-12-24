@@ -69,45 +69,63 @@ class DeepSVDD_network(nn.Module):
     def __init__(self, z_dim=32):
         super(DeepSVDD_network, self).__init__()
         self.pool = nn.MaxPool2d(2, 2)
-        self.conv1 = nn.Conv2d(3, 32, 5, bias=False, padding=2)
-        self.bn1 = nn.BatchNorm2d(32, eps=1e-04, affine=False)
-        self.conv2 = nn.Conv2d(32, 64, 5, bias=False, padding=2)
+
+        self.conv1 = nn.Conv2d(3, 128, 5, bias=False, padding=2)
+        self.bn1 = nn.BatchNorm2d(128, eps=1e-04, affine=False)
+        self.conv2 = nn.Conv2d(128, 64, 5, bias=False, padding=2)
         self.bn2 = nn.BatchNorm2d(64, eps=1e-04, affine=False)
-        self.conv3 = nn.Conv2d(64, 128, 5, bias=False, padding=2)
-        self.bn3 = nn.BatchNorm2d(128, eps=1e-04, affine=False)
-        self.fc1 = nn.Linear(128 * 28 * 28, z_dim, bias=False)
+        self.fc1 = nn.Linear(64 * 56 * 56, z_dim, bias=False)
 
     def forward(self, x):
         x = self.conv1(x)
         x = self.pool(F.leaky_relu(self.bn1(x)))
         x = self.conv2(x)
         x = self.pool(F.leaky_relu(self.bn2(x)))
-        x = self.conv3(x)
-        x = self.pool(F.leaky_relu(self.bn3(x)))
         x = x.view(x.size(0), -1)
         return self.fc1(x)
 
+
 class pretrain_autoencoder(nn.Module):
-    def __init__(self, z_dim=32):
+    def __init__(self, z_dim=64):
         super(pretrain_autoencoder, self).__init__()
         self.z_dim = z_dim
-        self.encoder = DeepSVDD_network(z_dim)
-        self.decoder = nn.Sequential(
-            nn.Linear(z_dim, 128 * 28 * 28),
-            nn.ReLU(True),
-            nn.Unflatten(1, (128, 28, 28)),
-            nn.ConvTranspose2d(128, 64, 5, stride=2, padding=2, output_padding=1),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(64, 32, 5, stride=2, padding=2, output_padding=1),
-            nn.ReLU(True),
-            nn.ConvTranspose2d(32, 3, 5, stride=2, padding=2, output_padding=1),
-            nn.Tanh()
-        )
+        self.pool = nn.MaxPool2d(2, 2)
+
+        self.conv1 = nn.Conv2d(3, 128, 5, bias=False, padding=2)
+        self.bn1 = nn.BatchNorm2d(128, eps=1e-04, affine=False)
+        self.conv2 = nn.Conv2d(128, 64, 5, bias=False, padding=2)
+        self.bn2 = nn.BatchNorm2d(64, eps=1e-04, affine=False)
+        self.fc1 = nn.Linear(64 * 56 * 56, z_dim, bias=False)
+
+        self.deconv1 = nn.ConvTranspose2d(z_dim, 64, 5, bias=False, padding=2)
+        self.bn3 = nn.BatchNorm2d(64, eps=1e-04, affine=False)
+        self.deconv2 = nn.ConvTranspose2d(64, 128, 5, bias=False, padding=2)
+        self.bn4 = nn.BatchNorm2d(128, eps=1e-04, affine=False)
+        self.deconv3 = nn.ConvTranspose2d(128, 3, 5, bias=False, padding=2)
+
+    def encoder(self, x):
+        x = self.conv1(x)
+        x = self.pool(F.leaky_relu(self.bn1(x)))
+        x = self.conv2(x)
+        x = self.pool(F.leaky_relu(self.bn2(x)))
+        x = x.view(x.size(0), -1)
+        return self.fc1(x)
+
+    def decoder(self, x):
+        x = x.view(x.size(0), self.z_dim, 1, 1)
+        x = F.interpolate(F.leaky_relu(x), scale_factor=56)
+        x = self.deconv1(x)
+        x = F.interpolate(F.leaky_relu(self.bn3(x)), scale_factor=2)
+        x = self.deconv2(x)
+        x = F.interpolate(F.leaky_relu(self.bn4(x)), scale_factor=2)
+        x = self.deconv3(x)
+        return torch.sigmoid(x)
 
     def forward(self, x):
         z = self.encoder(x)
         x_hat = self.decoder(z)
         return x_hat
+
 
 class TrainerDeepSVDD:
     def __init__(self, args, data_loader, device):
@@ -122,20 +140,21 @@ class TrainerDeepSVDD:
         scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=self.args.lr_milestones, gamma=0.1)
 
         ae.train()
-        pbar = tqdm(range(self.args.num_epochs_ae), desc="Pretraining Autoencoder")
-        for epoch in pbar:
+        for epoch in range(self.args.num_epochs_ae):
             total_loss = 0
             for x, _ in self.train_loader:
                 x = x.float().to(self.device)
+
                 optimizer.zero_grad()
                 x_hat = ae(x)
-                reconst_loss = F.mse_loss(x_hat, x)
+                reconst_loss = torch.mean(torch.sum((x_hat - x) ** 2, dim=tuple(range(1, x_hat.dim()))))
                 reconst_loss.backward()
                 optimizer.step()
+
                 total_loss += reconst_loss.item()
             scheduler.step()
-            pbar.set_postfix({'Loss': f'{total_loss / len(self.train_loader):.10f}'})
-
+            print('Pretraining Autoencoder... Epoch: {}, Loss: {:.3f}'.format(
+                epoch, total_loss / len(self.train_loader)))
         self.save_weights_for_DeepSVDD(ae, self.train_loader)
 
     def train(self):
@@ -173,8 +192,8 @@ class TrainerDeepSVDD:
     def save_weights_for_DeepSVDD(self, model, dataloader):
         c = self.set_c(model, dataloader)
         net = DeepSVDD_network(self.args.latent_dim).to(self.device)
-        state_dict = model.encoder.state_dict()
-        net.load_state_dict(state_dict)
+        state_dict = model.state_dict()
+        net.load_state_dict(state_dict, strict=False)
         torch.save({'center': c.cpu().data.numpy().tolist(),
                     'net_dict': net.state_dict()}, 'pretrained_parameters.pth')
 
@@ -194,17 +213,10 @@ class TrainerDeepSVDD:
 
 def weights_init_normal(m):
     classname = m.__class__.__name__
-    if hasattr(m, 'weight') and m.weight is not None:
-        if classname.find("Conv") != -1:
-            torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
-        elif classname.find("BatchNorm") != -1:
-            torch.nn.init.normal_(m.weight.data, 1.0, 0.02)
-            if m.bias is not None:
-                torch.nn.init.constant_(m.bias.data, 0.0)
-        elif classname.find("Linear") != -1:
-            torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
-            if m.bias is not None:
-                torch.nn.init.constant_(m.bias.data, 0.0)
+    if classname.find("Conv") != -1 and classname != 'Conv':
+        torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
+    elif classname.find("Linear") != -1:
+        torch.nn.init.normal_(m.weight.data, 0.0, 0.02)
 
 def eval(net, c, dataloader, device):
     scores = []
@@ -314,8 +326,8 @@ def visualize_distribution(net, c, dataloader, device):
 
 if __name__ == '__main__':
     args = easydict.EasyDict({
-        'num_epochs': 100,
-        'num_epochs_ae': 100,
+        'num_epochs': 1000,
+        'num_epochs_ae': 1000,
         'lr': 1e-3,
         'lr_ae': 1e-2,
         'weight_decay': 5e-7,
