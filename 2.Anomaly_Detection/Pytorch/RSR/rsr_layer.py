@@ -76,7 +76,7 @@ class RSRAutoEncoder(nn.Module):
 class RSRDs(torch.utils.data.Dataset):
     def __init__(self, target_class, other_classes, n_examples_per_other):
         super().__init__()
-        self.mnist = MNIST(".", download=True, transform=ToTensor())
+        self.mnist = MNIST("..", download=True, transform=ToTensor())
         self.target_indices = (self.mnist.targets == target_class).nonzero().flatten()
         other = []
         for other_class in other_classes:
