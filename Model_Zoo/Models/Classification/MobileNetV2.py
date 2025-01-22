@@ -8,14 +8,14 @@ class MobileNetV2(modelbase):
     def __init__(self, alpha=1.0, num_class=10):
         super().__init__()
         configs = [
-            # Input, Output, Expansion, Stride, Repeat
-            [32, 16, 6, 1, 1],
-            [16, 24, 6, 2, 2],
-            [24, 32, 6, 1, 3],
-            [32, 64, 6, 2, 4],
-            [64, 96, 6, 1, 3],
-            [96, 160, 6, 1, 3],
-            [160, 320, 6, 2, 1]
+            # Input, Output, Expansion, kernel, Stride, Repeat
+            [32, 16, 6, 3, 1, 1],
+            [16, 24, 6, 3, 2, 2],
+            [24, 32, 6, 3, 1, 3],
+            [32, 64, 6, 3, 2, 4],
+            [64, 96, 6, 3, 1, 3],
+            [96, 160, 6, 3, 1, 3],
+            [160, 320, 6, 3, 2, 1]
         ]
         self.First_Step = nn.Sequential(
             nn.Conv2d(3, int(32*alpha), 3, stride=2, padding=1, bias=False),
@@ -26,10 +26,11 @@ class MobileNetV2(modelbase):
         layers = []
         for i in range(len(configs)):
             layers.append(InvertedResidualBlock(int(configs[i][0] * alpha), int(configs[i][1] * alpha),
-                                                expansion=configs[i][2], stride=configs[i][3]))
+                                                expansion=configs[i][2], kernel=configs[i][3], stride=configs[i][4]))
             for _ in range(configs[i][4]-1):
                 layers.append(InvertedResidualBlock(int(configs[i][1]*alpha), int(configs[i][1]*alpha),
-                                                    expansion=configs[i][2], stride=configs[i][3]))
+                                                    expansion=configs[i][2], kernel=configs[i][3],
+                                                    stride=configs[i][4]))
 
         self.Second_Step = nn.Sequential(*layers)
         self.Third_Step = nn.Sequential(
