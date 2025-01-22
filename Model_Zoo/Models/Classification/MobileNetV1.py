@@ -22,7 +22,7 @@ class MobileNetV1(modelbase):
         self.First_Step = nn.Sequential(
             nn.Conv2d(3, int(32*alpha), 3, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(int(32*alpha)),
-            nn.ReLU(inplace=True)
+            nn.ReLU6(inplace=True)
         )
 
         layers = []

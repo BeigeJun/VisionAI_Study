@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from torchvision import transforms
 from torchvision.datasets import ImageFolder
 from Models.Classification.MobileNetV1 import MobileNetV1
-
+from Models.Classification.MobileNetV2 import MobileNetV2
 
 def data_loader(str_path):
     transform_info = transforms.Compose([
@@ -199,7 +199,7 @@ def main():
     save_path = "D:/Model_Save/Test"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = MobileNetV1(num_class=num_class).to(device)
+    model = MobileNetV2(num_class=num_class).to(device)
 
     train_loader, validation_loader, test_loader = data_loader(load_path)
     train_model(device=device, model=model, epochs=epoch, patience=patience, train_loader=train_loader,
