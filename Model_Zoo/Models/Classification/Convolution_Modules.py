@@ -67,7 +67,7 @@ class DepthWiseSeparableConv(nn.Module):
 
 
 class InvertedResidualBlock(nn.Module):
-    def __init__(self, in_put, out_put, expansion, kernel, stride, re=True, se=False):
+    def __init__(self, in_put, out_put, expansion, kernel, stride, se=False, re=True):
         super().__init__()
         assert stride in [1, 2], "stride must 1 or 2"
         self.use_short_cut = stride == 1 and in_put == out_put
