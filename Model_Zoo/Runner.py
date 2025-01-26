@@ -11,6 +11,7 @@ from Models.Classification.MobileNetV3 import MobileNetV3
 
 def data_loader(str_path):
     transform_info = transforms.Compose([
+        transforms.Resize((224, 224)),
         transforms.ToTensor(),
         transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
     ])
@@ -200,7 +201,7 @@ def main():
     save_path = "D:/Model_Save/Test"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = MobileNetV3(num_class=num_class).to(device)
+    model = MobileNetV3(model_type='small', num_class=num_class).to(device)
 
     train_loader, validation_loader, test_loader = data_loader(load_path)
     train_model(device=device, model=model, epochs=epoch, patience=patience, train_loader=train_loader,
@@ -208,4 +209,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+     main()
