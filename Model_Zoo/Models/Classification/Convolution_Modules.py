@@ -1,4 +1,7 @@
 import torch.nn as nn
+import torch
+
+#------------------------------------------------MobileNet--------------------------------------------------------------
 
 
 def _make_divisible(v, divisor=8, min_value=None):
@@ -21,9 +24,10 @@ class h_swish(nn.Module):
 
 def conv_depth_wise(in_put, expansion=1, kernel=3, stride=1, use_relu_hswish=True):
     layers = []
-    layers.append(nn.Conv2d(in_put*expansion, in_put*expansion, kernel_size=kernel, stride=stride, padding=1,
-                            groups=in_put*expansion, bias=False))
-    layers.append(nn.BatchNorm2d(in_put*expansion))
+    padding = kernel // 2
+    layers.append(nn.Conv2d(int(in_put*expansion), int(in_put*expansion), kernel_size=kernel, stride=stride,
+                            padding=padding, groups=int(in_put*expansion), bias=False))
+    layers.append(nn.BatchNorm2d(int(in_put*expansion)))
     if use_relu_hswish == True:
         layers.append(nn.ReLU6())
     elif use_relu_hswish == False:
@@ -33,9 +37,9 @@ def conv_depth_wise(in_put, expansion=1, kernel=3, stride=1, use_relu_hswish=Tru
 
 def conv_separable(in_put, out_put, in_put_expansion=1, out_put_expansion=1, use_relu6=True, use_relu_hswish=True):
     layers = []
-    layers.append(nn.Conv2d(in_put*in_put_expansion, out_put*out_put_expansion, kernel_size=1, stride=1, padding=0,
+    layers.append(nn.Conv2d(int(in_put*in_put_expansion), int(out_put*out_put_expansion), kernel_size=1, stride=1, padding=0,
                             bias=False))
-    layers.append(nn.BatchNorm2d(out_put*out_put_expansion))
+    layers.append(nn.BatchNorm2d(int(out_put*out_put_expansion)))
     if use_relu6:
         if use_relu_hswish == True:
             layers.append(nn.ReLU6())
@@ -44,14 +48,23 @@ def conv_separable(in_put, out_put, in_put_expansion=1, out_put_expansion=1, use
     return nn.Sequential(*layers)
 
 
-def se_module(in_put, out_put, expansion):
-    layers = []
-    layers.append(nn.AdaptiveAvgPool2d(1)),
-    layers.append(nn.Conv2d(in_put*expansion, _make_divisible(in_put*expansion//4), 1, 1))
-    layers.append(nn.ReLU6()),
-    layers.append(nn.Conv2d(_make_divisible(in_put*expansion//4), out_put, 1, 1))
-    layers.append(h_swish())
-    return nn.Sequential(*layers)
+class SEModule(nn.Module):
+    def __init__(self, in_put, reduce=4):
+        super(SEModule, self).__init__()
+        self.squeeze = nn.AdaptiveAvgPool2d((1, 1))
+        self.excitation = nn.Sequential(
+            nn.Linear(in_put, int(in_put//reduce)),
+            nn.ReLU(),
+            nn.Linear(int(in_put//reduce), in_put),
+            h_swish()
+        )
+
+    def forward(self, x):
+        out = self.squeeze(x)
+        out = out.view(out.size(0), -1)
+        out = self.excitation(out)
+        out = out.view(out.size(0), out.size(1), 1, 1)
+        return out * x
 
 
 class DepthWiseSeparableConv(nn.Module):
@@ -61,9 +74,9 @@ class DepthWiseSeparableConv(nn.Module):
         self.Point_Wise = conv_separable(in_put=in_put, out_put=out_put)
 
     def forward(self, x):
-        x = self.Depth_Wise(x)
-        x = self.Point_Wise(x)
-        return x
+        out = self.Depth_Wise(x)
+        out = self.Point_Wise(out)
+        return out
 
 
 class InvertedResidualBlock(nn.Module):
@@ -73,7 +86,7 @@ class InvertedResidualBlock(nn.Module):
         self.use_short_cut = stride == 1 and in_put == out_put
         self.Point_Wise1 = conv_separable(in_put=in_put, out_put=in_put, out_put_expansion=expansion, use_relu_hswish=re)
         self.Depth_Wise = conv_depth_wise(in_put=in_put, expansion=expansion, kernel=kernel, stride=stride)
-        self.SE_modul = se_module(in_put=in_put, out_put=in_put, expansion=expansion)
+        self.SE_modul = SEModule(in_put=int(in_put*expansion))
         self.Point_Wise2 = conv_separable(in_put=in_put, out_put=out_put, in_put_expansion=expansion, use_relu6=False,
                                           use_relu_hswish=re)
         self.se = se
@@ -89,27 +102,115 @@ class InvertedResidualBlock(nn.Module):
         return out
 
 
+#------------------------------------------------Resnet-----------------------------------------------------------------
 
 
+class DownSample(nn.Module):
+    def __init__(self, in_put, out_put, stride, expansion=4):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels=in_put, out_channels=out_put*expansion, kernel_size=1, stride=stride,
+                              bias=False)
+        self.batch = nn.BatchNorm2d(out_put*expansion)
+
+    def forward(self, x):
+        out = self.conv(x)
+        out = self.batch(out)
+        return out
 
 
+class ResidualBlock(nn.Module):
+    def __init__(self, in_put, out_put, stride, expansion):
+        super().__init__()
+        self.expansion = expansion
+
+        self.conv1x1_1 = nn.Sequential(
+            nn.Conv2d(in_channels=in_put, out_channels=out_put, kernel_size=1, stride=1),
+            nn.BatchNorm2d(out_put),
+            nn.ReLU()
+        )
+        self.conv3x3 = nn.Sequential(
+            nn.Conv2d(in_channels=out_put, out_channels=out_put, kernel_size=3, stride=stride, padding=1),
+            nn.BatchNorm2d(out_put),
+            nn.ReLU()
+        )
+        self.conv1x1_2 = nn.Sequential(
+            nn.Conv2d(in_channels=out_put, out_channels=out_put*expansion, kernel_size=1, stride=1),
+            nn.BatchNorm2d(out_put*expansion)
+        )
+
+        self.downsample = DownSample(in_put=in_put, out_put=out_put, stride=stride, expansion=expansion)
+        self.use_downsample = False
+        self.relu = nn.ReLU(inplace=True)
+
+        if stride != 1 or in_put != out_put * self.expansion:
+            self.use_downsample = True
+
+    def forward(self, x):
+        out = self.conv1x1_1(x)
+        out = self.conv3x3(out)
+        out = self.conv1x1_2(out)
+
+        if self.use_downsample:
+            down_out = self.downsample(x)
+            out += down_out
+        out = self.relu(out)
+        return out
 
 
+#---------------------------------------------------EfficientNet--------------------------------------------------------
+
+class SEBlock(nn.Module):
+    def __init__(self, in_put, reduce=4):
+        super().__init__()
+
+        self.squeeze = nn.AdaptiveAvgPool2d((1, 1))
+        self.excitation = nn.Sequential(
+            nn.Linear(in_put, max(1, int(in_put//reduce))),
+            nn.SiLU(),
+            nn.Linear(max(1, int(in_put//reduce)), in_put),
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        se = self.squeeze(x)
+        se = torch.flatten(se, 1)
+        se = self.excitation(se)
+        se = se.unsqueeze(dim=2).unsqueeze(dim=3)
+        out = se * x
+        return out
 
 
+class MBconv(nn.Module):
+    def __init__(self, in_put, out_put, kernel_size, stride, expansion):
+        super().__init__()
+        assert stride in [1, 2], "stride must 1 or 2"
 
+        self.use_short_cut = stride == 1 and in_put == out_put
+        self.MBconv1 = True if expansion == 1 else False
 
+        self.conv1x1_1 = nn.Sequential(
+            nn.Conv2d(in_channels=in_put, out_channels=expansion, kernel_size=1, stride=1),
+            nn.BatchNorm2d(expansion),
+            nn.ReLU()
+        )
+        self.conv3x3 = nn.Sequential(
+            nn.Conv2d(in_channels=expansion, out_channels=expansion, kernel_size=kernel_size,
+                      stride=stride, groups=expansion, padding=(kernel_size-1) // 2),
+            nn.BatchNorm2d(expansion),
+            nn.ReLU()
+        )
+        self.conv1x1_2 = nn.Sequential(
+            nn.Conv2d(in_channels=expansion, out_channels=out_put, kernel_size=1),
+            nn.BatchNorm2d(out_put)
+        )
+        self.SE = SEBlock(expansion)
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+    def forward(self, x):
+        if self.MBconv1:
+            x = self.conv1x1_1(x)
+        out = self.conv3x3(x)
+        out = self.SE(out)
+        out = self.conv1x1_2(out)
+        if self.use_short_cut:
+            out = out + x
+        return out
