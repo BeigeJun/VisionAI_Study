@@ -7,7 +7,7 @@ from Model_Zoo.Models.Model_Base.ModelBase import modelbase
 
 
 class MobileNetV3(modelbase):
-    def __init__(self, alpha=1.0, num_class=10):
+    def __init__(self, model_type='large', alpha=1.0, num_class=10):
         super().__init__()
         large = [
             # Input, Output, Expansion, Kernel, Stride, SE, UseHS
@@ -41,6 +41,16 @@ class MobileNetV3(modelbase):
             [96, 96, 6, 5, 1, True, True],
         ]
 
+        if model_type == 'small':
+            model = small
+            last_linear = 1024
+        elif model_type == 'large':
+            model = large
+            last_linear = 1280
+        else:
+            model = None
+            last_linear = 0
+
         in_channel = _make_divisible(16 * alpha)
         out_channel = 0
         self.First_Step = nn.Sequential(
@@ -48,13 +58,12 @@ class MobileNetV3(modelbase):
             nn.BatchNorm2d(int(16*alpha)),
             nn.ReLU6(inplace=True)
         )
-####################################################################################################################
         layers = []
-        for i in range(len(large)):
-            out_channel = _make_divisible(large[i][1] * alpha)
+        for i in range(len(model)):
+            out_channel = _make_divisible(model[i][1] * alpha)
             layers.append(InvertedResidualBlock(in_channel, out_channel,
-                                                expansion=large[i][2], kernel=large[i][3], stride=large[i][4],
-                                                se=large[i][5], re=large[i][6]))
+                                                expansion=model[i][2], kernel=model[i][3], stride=model[i][4],
+                                                se=model[i][5], re=model[i][6]))
             in_channel = out_channel
 
         self.Second_Step = nn.Sequential(*layers)
@@ -65,10 +74,9 @@ class MobileNetV3(modelbase):
             h_swish(),
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-            nn.Linear(960, 1280),
-            nn.BatchNorm2d(1280),
+            nn.Linear(out_channel * 6, last_linear),
             h_swish(),
-            nn.Linear(1280, num_class)
+            nn.Linear(last_linear, num_class)
             )
 
     def forward(self, x):

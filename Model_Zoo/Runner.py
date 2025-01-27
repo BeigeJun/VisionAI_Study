@@ -8,6 +8,7 @@ from torchvision.datasets import ImageFolder
 from Models.Classification.MobileNetV1 import MobileNetV1
 from Models.Classification.MobileNetV2 import MobileNetV2
 from Models.Classification.MobileNetV3 import MobileNetV3
+from Models.Classification.ResNet import ResNet
 
 def data_loader(str_path):
     transform_info = transforms.Compose([
@@ -194,14 +195,14 @@ def train_model(device, model, epochs, patience, train_loader, validation_loader
 
 
 def main():
-    num_class = 2
+    num_class = 1000
     epoch = 100
     patience = 100
-    load_path = "D:/Image_data/Test"
+    load_path = "D:/Image_Data/Splited_ImageNet_10"
     save_path = "D:/Model_Save/Test"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = MobileNetV3(model_type='small', num_class=num_class).to(device)
+    model = ResNet(model_type='101', num_class=num_class).to(device)
 
     train_loader, validation_loader, test_loader = data_loader(load_path)
     train_model(device=device, model=model, epochs=epoch, patience=patience, train_loader=train_loader,

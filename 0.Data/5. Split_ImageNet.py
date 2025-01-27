@@ -6,7 +6,7 @@ import random
 
 def copy_subset_imagenet(src_root, dst_root, csv_file, images_per_class=10):
     train_src = os.path.join(src_root, 'train')
-    train_dst = os.path.join(dst_root, 'train')
+    train_dst = os.path.join(dst_root, 'test')
 
     if not os.path.exists(train_dst):
         os.makedirs(train_dst)
@@ -67,8 +67,8 @@ def copy_subset_imagenet(src_root, dst_root, csv_file, images_per_class=10):
     print("Finished processing validation dataset")
 
 
-src_root = 'D:/ImageNet/ImageNet/ILSVRC/Data/CLS-LOC'
-dst_root = 'D:/Splited_ImageNet'
-csv_file = 'D:/ImageNet/ImageNet/LOC_val_solution.csv'
+src_root = 'D:/Image_Data/ImageNet/ImageNet/ILSVRC/Data/CLS-LOC'
+dst_root = 'D:/Image_Data/Splited_ImageNet_10'
+csv_file = 'D:/Image_Data/ImageNet/ImageNet/LOC_val_solution.csv'
 
 copy_subset_imagenet(src_root, dst_root, csv_file)
