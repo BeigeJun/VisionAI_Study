@@ -9,3 +9,7 @@ class modelbase(nn.Module, ABC):
     @abstractmethod
     def forward(self, x):
         pass
+
+    @abstractmethod
+    def return_transform_info(self):
+        pass

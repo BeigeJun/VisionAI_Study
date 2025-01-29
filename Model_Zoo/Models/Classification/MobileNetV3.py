@@ -1,14 +1,21 @@
 import torch.nn as nn
-
+from torchvision import transforms
 from Model_Zoo.Models.Classification.Convolution_Modules import InvertedResidualBlock
 from Model_Zoo.Models.Classification.Convolution_Modules import _make_divisible
 from Model_Zoo.Models.Classification.Convolution_Modules import h_swish
-from Model_Zoo.Models.Model_Base.ModelBase import modelbase
+from Model_Zoo.Models.Util.ModelBase import modelbase
 
 
 class MobileNetV3(modelbase):
     def __init__(self, model_type='large', alpha=1.0, num_class=10):
         super().__init__()
+
+        self.transform_info = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+        ])
+
         large = [
             # Input, Output, Expansion, Kernel, Stride, SE, UseHS
             [16, 16, 1, 3, 1, False, False],
@@ -84,3 +91,6 @@ class MobileNetV3(modelbase):
         x = self.Second_Step(x)
         x = self.Third_Step(x)
         return x
+
+    def return_transform_info(self):
+        return self.transform_info

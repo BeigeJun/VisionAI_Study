@@ -1,13 +1,21 @@
 import torch.nn as nn
-
+from torchvision import transforms
 from Model_Zoo.Models.Classification.Convolution_Modules import ResidualBlock
-from Model_Zoo.Models.Model_Base.ModelBase import modelbase
+from Model_Zoo.Models.Util.ModelBase import modelbase
 
 
 class ResNet(modelbase):
     def __init__(self, model_type='50', num_class=10):
         super().__init__()
+
+        self.transform_info = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
+        ])
+
         self.expansion = 4
+
         self.resnet50 = [
             #Out, Stride, Repeat
             [64, 1, 3],
@@ -70,3 +78,6 @@ class ResNet(modelbase):
         x = self.Second_step(x)
         x = self.Third_step(x)
         return x
+
+    def return_transform_info(self):
+        return self.transform_info

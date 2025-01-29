@@ -3,28 +3,25 @@ from tqdm import tqdm
 import torch.utils.data
 import torch.optim as optim
 import matplotlib.pyplot as plt
-from torchvision import transforms
 from torchvision.datasets import ImageFolder
 from Models.Classification.MobileNetV1 import MobileNetV1
 from Models.Classification.MobileNetV2 import MobileNetV2
 from Models.Classification.MobileNetV3 import MobileNetV3
 from Models.Classification.ResNet import ResNet
+from Models.Classification.EfficientNet import EfficientNet
 
-def data_loader(str_path):
-    transform_info = transforms.Compose([
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010)),
-    ])
+
+def data_loader(str_path, info):
+    transform_info = info
 
     train_dataset = ImageFolder(root=str_path + "//train", transform=transform_info)
     validation_dataset = ImageFolder(root=str_path + "//validation", transform=transform_info)
     test_dataset = ImageFolder(root=str_path + "//test", transform=transform_info)
 
     #num_workers는 데이터를 불러올 때 사용할 프로세스 수. 기본값은 0이고 커질수록 데이터를 불러오는 속도가 빨라짐.
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=2, num_workers=4, shuffle=True)
-    validation_loader = torch.utils.data.DataLoader(validation_dataset, batch_size=2, num_workers=4, shuffle=False)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=2, num_workers=4, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, num_workers=4, shuffle=True)
+    validation_loader = torch.utils.data.DataLoader(validation_dataset, batch_size=1, num_workers=4, shuffle=False)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, num_workers=4, shuffle=False)
 
     return train_loader, validation_loader, test_loader
 
@@ -52,10 +49,12 @@ def train_model(device, model, epochs, patience, train_loader, validation_loader
     fig, axs = plt.subplots(1, 2, figsize=(16, 4))
 
     model.train()
+
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-    for epoch in tqdm(range(epochs), desc="Epoch Progress"):
+    pbar = tqdm(range(epochs), desc="Epoch Progress")
+    for epoch in pbar:
         running_loss = 0.0
         correct_train = 0
         total_train = 0
@@ -76,6 +75,10 @@ def train_model(device, model, epochs, patience, train_loader, validation_loader
             _, predicted = torch.max(outputs.data, 1)
             total_train += labels.size(0)
             correct_train += (predicted == labels).sum().item()
+
+        epoch_loss = running_loss / len(train_loader)
+        epoch_accuracy = 100 * correct_train / total_train
+        pbar.set_postfix({'Loss': f'{epoch_loss:.4f}', 'Accuracy': f'{epoch_accuracy:.2f}%'})
 
         patience_count += 1
         train_loss = running_loss / len(train_loader)
@@ -195,16 +198,16 @@ def train_model(device, model, epochs, patience, train_loader, validation_loader
 
 
 def main():
-    num_class = 1000
-    epoch = 100
-    patience = 100
-    load_path = "D:/Image_Data/Splited_ImageNet_10"
+    num_class = 3
+    epoch = 10000
+    patience = 1000
+    load_path = "D:/Image_Data/FishData"
     save_path = "D:/Model_Save/Test"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = ResNet(model_type='101', num_class=num_class).to(device)
-
-    train_loader, validation_loader, test_loader = data_loader(load_path)
+    model = ResNet(model_type='50', num_class=num_class).to(device)
+    transform_info = model.return_transform_info()
+    train_loader, validation_loader, test_loader = data_loader(load_path, transform_info)
     train_model(device=device, model=model, epochs=epoch, patience=patience, train_loader=train_loader,
                 validation_loader=validation_loader, test_loader=test_loader, save_path=save_path)
 

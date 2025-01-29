@@ -206,11 +206,13 @@ class MBconv(nn.Module):
         self.SE = SEBlock(expansion)
 
     def forward(self, x):
-        if self.MBconv1:
+        identity = x
+        if not self.MBconv1:
             x = self.conv1x1_1(x)
-        out = self.conv3x3(x)
-        out = self.SE(out)
-        out = self.conv1x1_2(out)
+        x = self.conv3x3(x)
+        x = self.SE(x)
+        x = self.conv1x1_2(x)
         if self.use_short_cut:
-            out = out + x
-        return out
+            return x + identity
+        return x
+
