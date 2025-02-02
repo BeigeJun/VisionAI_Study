@@ -2,8 +2,25 @@ import os
 import torch
 import pandas as pd
 from PIL import Image
+from torchvision.datasets import ImageFolder
 
-class DataSet(torch.utils.data.Dataset):
+def Classification_data_loader(str_path, info):
+    transform_info = info
+
+    train_dataset = ImageFolder(root=str_path + "//train", transform=transform_info)
+    validation_dataset = ImageFolder(root=str_path + "//validation", transform=transform_info)
+    test_dataset = ImageFolder(root=str_path + "//test", transform=transform_info)
+
+    #num_workers는 데이터를 불러올 때 사용할 프로세스 수. 기본값은 0이고 커질수록 데이터를 불러오는 속도가 빨라짐.
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, num_workers=4, shuffle=True)
+    validation_loader = torch.utils.data.DataLoader(validation_dataset, batch_size=1, num_workers=4, shuffle=False)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, num_workers=4, shuffle=False)
+
+    return train_loader, validation_loader, test_loader
+
+
+
+class Object_Detection_data_loader(torch.utils.data.Dataset):
     def __init__(self, csv_dir, img_dir, label_dir, transform=None, grid_size=7, boxes=2, channel=20):
         #csv 파일(이미지 경로, 라벨 경로)
         self.annotations = pd.read_csv(csv_dir)
