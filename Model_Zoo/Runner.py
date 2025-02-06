@@ -3,27 +3,14 @@ from tqdm import tqdm
 import torch.utils.data
 import torch.optim as optim
 import matplotlib.pyplot as plt
+from DataLoader import Classification_data_loader, Object_Detection_data_loader, Compose
 from torchvision.datasets import ImageFolder
 from Models.Classification.MobileNetV1 import MobileNetV1
 from Models.Classification.MobileNetV2 import MobileNetV2
 from Models.Classification.MobileNetV3 import MobileNetV3
 from Models.Classification.ResNet import ResNet
 from Models.Classification.EfficientNet import EfficientNet
-
-
-def data_loader(str_path, info):
-    transform_info = info
-
-    train_dataset = ImageFolder(root=str_path + "//train", transform=transform_info)
-    validation_dataset = ImageFolder(root=str_path + "//validation", transform=transform_info)
-    test_dataset = ImageFolder(root=str_path + "//test", transform=transform_info)
-
-    #num_workers는 데이터를 불러올 때 사용할 프로세스 수. 기본값은 0이고 커질수록 데이터를 불러오는 속도가 빨라짐.
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, num_workers=4, shuffle=True)
-    validation_loader = torch.utils.data.DataLoader(validation_dataset, batch_size=1, num_workers=4, shuffle=False)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, num_workers=4, shuffle=False)
-
-    return train_loader, validation_loader, test_loader
+from Models.ObjectDetection.YoloV1 import Yolov1
 
 
 def train_model(device, model, epochs, patience, train_loader, validation_loader, test_loader, save_path):
@@ -201,13 +188,29 @@ def main():
     num_class = 3
     epoch = 10000
     patience = 1000
-    load_path = "D:/Image_Data/FishData"
     save_path = "D:/Model_Save/Test"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = ResNet(model_type='50', num_class=num_class).to(device)
+    model = Yolov1(split_size=7, num_boxes=2).to(device)
+
+    model_name = model.__class__.__name__
+    model_type = "Object_Detection" if model_name == 'Yolov1' else "Classification"
+
     transform_info = model.return_transform_info()
-    train_loader, validation_loader, test_loader = data_loader(load_path, transform_info)
+    if model_type == "Classification":
+        load_path = "D:/Image_Data/FishData"
+        train_loader, validation_loader, test_loader = Classification_data_loader(load_path, transform_info)
+    else:
+        traincsvfile_path = "D:/Image_Data/Pascal/100examples.csv"
+        testcsvfile_path = "D:/Image_Data/Pascal/test.csv"
+        IMG_DIR = "D:/Image_Data/Pascal/images"
+        LABEL_DIR = "D:/Image_Data/Pascal/labels"
+        transform = Compose(transform_info)
+        train_loader, validation_loader, test_loader = Object_Detection_data_loader(traincsvfile_path,
+                                                                                    transform=transform,
+                                                                                    img_dir=IMG_DIR,
+                                                                                    label_dir=LABEL_DIR)
+
     train_model(device=device, model=model, epochs=epoch, patience=patience, train_loader=train_loader,
                 validation_loader=validation_loader, test_loader=test_loader, save_path=save_path)
 

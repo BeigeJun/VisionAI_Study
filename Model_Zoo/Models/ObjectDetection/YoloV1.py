@@ -1,9 +1,16 @@
 import torch.nn as nn
+from torchvision import transforms
+from Model_Zoo.Models.Util.ModelBase import modelbase
 
-
-class Yolov1(nn.Module):
+class Yolov1(modelbase):
     def __init__(self, split_size, num_boxes, num_classes=20):
         super().__init__()
+
+        self.transform_info = [
+            transforms.Resize((448, 448)),
+            transforms.ToTensor(),
+        ]
+
         self.cfg = [
             # Input, Output, Kernel, Stride, Pool
             [3, 64, 7, 2, True],
@@ -52,3 +59,6 @@ class Yolov1(nn.Module):
     def forward(self, x):
         out = self.First_layer(x)
         return self.Second_layer(out)
+
+    def return_transform_info(self):
+        return self.transform_info

@@ -4,6 +4,10 @@ import pandas as pd
 from PIL import Image
 from torchvision.datasets import ImageFolder
 
+
+#-----------------------------------------------classification----------------------------------------------------------
+
+
 def Classification_data_loader(str_path, info):
     transform_info = info
 
@@ -18,7 +22,17 @@ def Classification_data_loader(str_path, info):
 
     return train_loader, validation_loader, test_loader
 
+#-----------------------------------------------objectdetection---------------------------------------------------------
 
+
+class Compose(object):
+    def __init__(self, transforms):
+        self.transforms = transforms
+
+    def __call__(self, img, bboxes):
+        for transform in self.transforms:
+            img, bboxes = transform(img), bboxes
+        return img, bboxes
 
 class Object_Detection_data_loader(torch.utils.data.Dataset):
     def __init__(self, csv_dir, img_dir, label_dir, transform=None, grid_size=7, boxes=2, channel=20):
