@@ -8,7 +8,7 @@ from torchvision.datasets import ImageFolder
 #-----------------------------------------------classification----------------------------------------------------------
 
 
-def Classification_data_loader(str_path, info):
+def Classification_data_loader(str_path, batch_size, info):
     transform_info = info
 
     train_dataset = ImageFolder(root=str_path + "//train", transform=transform_info)
@@ -16,9 +16,9 @@ def Classification_data_loader(str_path, info):
     test_dataset = ImageFolder(root=str_path + "//test", transform=transform_info)
 
     #num_workers는 데이터를 불러올 때 사용할 프로세스 수. 기본값은 0이고 커질수록 데이터를 불러오는 속도가 빨라짐.
-    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=1, num_workers=4, shuffle=True)
-    validation_loader = torch.utils.data.DataLoader(validation_dataset, batch_size=1, num_workers=4, shuffle=False)
-    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=1, num_workers=4, shuffle=False)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, num_workers=4, shuffle=True)
+    validation_loader = torch.utils.data.DataLoader(validation_dataset, batch_size=batch_size, num_workers=4, shuffle=False)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, num_workers=4, shuffle=False)
 
     return train_loader, validation_loader, test_loader
 
