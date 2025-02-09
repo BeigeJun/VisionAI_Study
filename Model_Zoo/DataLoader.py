@@ -34,6 +34,7 @@ class Compose(object):
             img, bboxes = transform(img), bboxes
         return img, bboxes
 
+
 class Object_Detection_data_loader(torch.utils.data.Dataset):
     def __init__(self, csv_dir, img_dir, label_dir, transform=None, grid_size=7, boxes=2, channel=20):
         #csv 파일(이미지 경로, 라벨 경로)
