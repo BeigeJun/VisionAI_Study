@@ -53,6 +53,7 @@ class Yolov1(modelbase):
             nn.Linear(1024 * split_size * split_size, 496),
             nn.LeakyReLU(0.1),
             nn.Dropout(0.5),
+            #마지막 7*7*30의 아웃풋이 7*7로 나눠진 영역의 바운딩박스 2개 * (x, y, w, h, confidence) + 각 클래스의 확률
             nn.Linear(496, split_size * split_size * (5 * num_boxes + num_classes))
         )
 
