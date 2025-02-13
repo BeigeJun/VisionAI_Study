@@ -26,7 +26,7 @@ class ResidualBlock(nn.Module):
         for _ in range(Repeat):
             layers.append(BasicCNNBlock(In_Output, In_Output//2, kernel_size=1))
             layers.append(BasicCNNBlock(In_Output//2, In_Output, kernel_size=3, padding=1))
-        self.Residual_step=nn.Sequential(*layers)
+        self.Residual_step = nn.Sequential(*layers)
         self.use_Residual = use_Residual
 
     def forward(self, x):
