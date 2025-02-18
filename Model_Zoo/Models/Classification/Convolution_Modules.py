@@ -1,7 +1,25 @@
 import torch.nn as nn
 import torch
+#---------------------------------------------------VGGNet--------------------------------------------------------------
 
-#------------------------------------------------MobileNet--------------------------------------------------------------
+
+class conv_n_layer_block(nn.Module):
+    def __init__(self, Input, Output, Repeat):
+        super().__init__()
+        layer = []
+        layer.append(nn.Conv2d(in_channels=Input, out_channels=Output, kernel_size=3, padding=1))
+        layer.append(nn.ReLU(inplace=True))
+        for i in range(Repeat - 1):
+            layer.append(nn.Conv2d(in_channels=Output, out_channels=Output, kernel_size=3, padding=1))
+            layer.append(nn.ReLU(inplace=True))
+            
+        layer.append(nn.MaxPool2d(kernel_size=2, stride=2))
+        self.convLayer = nn.Sequential(*layer)
+
+    def forward(self, x):
+        return self.convLayer(x)
+
+#--------------------------------------------------MobileNet------------------------------------------------------------
 
 
 def _make_divisible(v, divisor=8, min_value=None):
