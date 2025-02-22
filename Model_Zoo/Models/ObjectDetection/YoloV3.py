@@ -58,13 +58,24 @@ class ScalePrediction(nn.Module):
 class DarkNet53(nn.Module):
     def __init__(self):
         super().__init__()
-
         self.cfg = [
-            # Input, Output, Kernel, Stride
-            [3, 32, 3, 1],
-            [32, 64, 3, 2],
-            [64, 128, 3, 2],
-            [128, 256, 3, 2],
-            [256, 512, 3, 2],
-            [512, 1024, 3, 2]]
-        self.residual_repeat = [1, 2, 8, 8, 4]
+            # Input, Output, Kernel, Stride, Residual_repeat
+            [3, 32, 3, 1, 0],
+            [32, 64, 3, 2, 1],
+            [64, 128, 3, 2, 2],
+            [128, 256, 3, 2, 8],
+            [256, 512, 3, 2, 8],
+            [512, 1024, 3, 2, 4]]
+
+        self.layers = []
+        for i, (Input, Output, Kernel, Stride, Residual_repeat) in enumerate(self.cfg):
+            self.layers.append(BasicCNNBlock(Input=Input, Output=Output, Kernel=Kernel, Stride=Stride, padding=1))
+            self.layers.append(ResidualBlock(In_Output=Output, Repeat=Residual_repeat)) if Residual_repeat != 0 else None
+
+    def forward(self, x):
+        outputs = []
+        for layer in self.layers:
+            x = layer(x)
+            if isinstance(layer, ResidualBlock) and layer.Residual_step[1].conv.out_channels in[256, 512, 1024]:
+                outputs.append(x)
+        return outputs
