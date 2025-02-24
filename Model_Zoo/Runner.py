@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import random_split
 from Model_Zoo.Models.Util.Draw_Graph import Draw_Graph
 from Model_Zoo.Models.ObjectDetection.Util.Utils import calculate_IoU, mAP, get_bboxes, YoloLoss
-from DataLoader import Classification_data_loader, Object_Detection_data_loader, Compose
+from DataLoader import Classification_data_loader, YoloV1DataLoader, Compose, YoloV3DataLoader
 from torchvision.datasets import ImageFolder
 from Models.Classification.VGGNet import VGGNet
 from Models.Classification.AlexNet import AlexNet
@@ -152,11 +152,17 @@ def main():
         testcsvfile_path = "D:/Image_Data/Pascal/test.csv"
         IMG_DIR = "D:/Image_Data/Pascal/images"
         LABEL_DIR = "D:/Image_Data/Pascal/labels"
-        transform = Compose(transform_info)
-        train_validation_set = Object_Detection_data_loader(traincsvfile_path, transform=transform,
-                                                             img_dir=IMG_DIR, label_dir=LABEL_DIR)
-        test_set = Object_Detection_data_loader(testcsvfile_path, transform=transform,
-                                                             img_dir=IMG_DIR, label_dir=LABEL_DIR)
+        if model_name == 'Yolov1':
+            transform = Compose(transform_info)
+            train_validation_set = YoloV1DataLoader(traincsvfile_path, transform=transform,
+                                                                 img_dir=IMG_DIR, label_dir=LABEL_DIR)
+            test_set = YoloV1DataLoader(testcsvfile_path, transform=transform,
+                                                                 img_dir=IMG_DIR, label_dir=LABEL_DIR)
+        elif model_name == 'Yolov3':
+            train_validation_set = YoloV3DataLoader(csv_file=traincsvfile_path, img_dir=IMG_DIR,
+                                                                 label_dir=LABEL_DIR, image_size=416, C=20, transform=None)
+            test_set = YoloV3DataLoader(csv_file=testcsvfile_path, img_dir=IMG_DIR,
+                                                        label_dir=LABEL_DIR, image_size=416, C=20, transform=None)
 
         train_set_num = int(0.8 * len(train_validation_set))
         validation_set_num = len(train_validation_set) - train_set_num

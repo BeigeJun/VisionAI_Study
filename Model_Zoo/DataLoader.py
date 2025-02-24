@@ -36,7 +36,7 @@ class Compose(object):
         return img, bboxes
 
 
-class Object_Detection_data_loader(torch.utils.data.Dataset):
+class YoloV1DataLoader(torch.utils.data.Dataset):
     def __init__(self, csv_dir, img_dir, label_dir, transform=None, grid_size=7, boxes=2, channel=20):
         #csv 파일(이미지 경로, 라벨 경로)
         self.annotations = pd.read_csv(csv_dir)
@@ -94,8 +94,15 @@ class Object_Detection_data_loader(torch.utils.data.Dataset):
 
 #-------------------------------------------YoloV3----------------------------------------------------------------------
 
-class YOLODataset(torch.utils.data.Dataset):
-    def __init__(self, csv_file, img_dir,  label_dir, anchors, image_size=416, S=[13, 26, 52], C=20, transform=None):
+ANCHORS = [
+    [(0.28, 0.22), (0.38, 0.48), (0.9, 0.78)],
+    [(0.07, 0.15), (0.15, 0.11), (0.14, 0.29)],
+    [(0.02, 0.03), (0.04, 0.07), (0.08, 0.06)],
+]
+
+
+class YoloV3DataLoader(torch.utils.data.Dataset):
+    def __init__(self, csv_file, img_dir,  label_dir, anchors=ANCHORS, image_size=416, S=[13, 26, 52], C=20, transform=None):
         self.annotations = pd.read_csv(csv_file)
         self.img_dir = img_dir
         self.label_dir = label_dir
@@ -148,3 +155,4 @@ class YOLODataset(torch.utils.data.Dataset):
                     targets[scale_idx][anchor_on_scale, i, j, 0] = -1
 
         return image, tuple(targets)
+
