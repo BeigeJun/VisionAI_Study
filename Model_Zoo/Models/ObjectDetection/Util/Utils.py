@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
+#------------------------------------------------YoloV1-----------------------------------------------------------------
+
 
 class YoloLoss(nn.Module):
     def __init__(self, S=7, B=2, C=20):
@@ -363,3 +365,15 @@ def get_bboxes(loader, model, iou_threshold, threshold, pred_format="cells", box
 
     model.train()
     return all_pred_boxes, all_true_boxes
+
+
+#------------------------------------------------YoloV3-----------------------------------------------------------------
+
+def iou_width_height(boxes1, boxes2):
+    intersection = torch.min(boxes1[..., 0], boxes2[..., 0]) * torch.min(
+        boxes1[..., 1], boxes2[..., 1]
+    )
+    union = (
+        boxes1[..., 0] * boxes1[..., 1] + boxes2[..., 0] * boxes2[..., 1] - intersection
+    )
+    return intersection / union
