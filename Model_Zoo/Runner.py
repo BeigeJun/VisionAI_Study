@@ -16,10 +16,11 @@ from Models.Classification.MobileNetV3 import MobileNetV3
 from Models.Classification.ResNet import ResNet
 from Models.Classification.EfficientNet import EfficientNet
 from Models.ObjectDetection.YoloV1 import Yolov1
+from Model_Zoo.Loss import CrossEntropyLoss, FocalLoss
 
 
 def train_model(device, model, model_type, epochs, validation_epoch, learning_rate, patience, train_loader, validation_loader,
-                test_loader, save_path):
+                test_loader, save_path, image_count):
     graph = Draw_Graph(save_path, patience)
 
     patience_count = 0
@@ -27,9 +28,19 @@ def train_model(device, model, model_type, epochs, validation_epoch, learning_ra
     model.train()
     #criterion, optimizer 선택 가능하게 변경 필요
     if model_type == "Classification":
-        criterion = torch.nn.CrossEntropyLoss()
+        counts = []
+        count_contents = 0
+        for folder, count in image_count.items():
+            print(f"- {folder}: {count}개")
+            counts.append(count)
+            count_contents += count
+        counts = [count / count_contents for count in counts]
+        criterion = CrossEntropyLoss()
+
     elif model_type == "Object_Detection":
         criterion = YoloLoss()
+    else:
+        criterion = CrossEntropyLoss()
 
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
@@ -126,6 +137,20 @@ def train_model(device, model, model_type, epochs, validation_epoch, learning_ra
     graph.save_test_info(total, correct, accuracy)
 
 
+def count_folder_contents(root_dir):
+    contents = os.listdir(root_dir)
+
+    folder_count = sum(1 for item in contents if os.path.isdir(os.path.join(root_dir, item)))
+
+    contents_count = {}
+    for item in contents:
+        item_path = os.path.join(root_dir, item)
+        if os.path.isdir(item_path):
+            contents_count[item] = len(os.listdir(item_path))
+
+    return folder_count, contents_count
+
+
 def main():
     num_class = 20
     epoch = 10000
@@ -146,7 +171,9 @@ def main():
     transform_info = model.return_transform_info()
     if model_type == "Classification":
         load_path = "D:/Image_Data/FishData"
+        folder_count, contents_count = count_folder_contents(load_path+"/train")
         train_loader, validation_loader, test_loader = Classification_data_loader(load_path, batch_size, transform_info)
+
     else:
         traincsvfile_path = "D:/Image_Data/Pascal/100examples.csv"
         testcsvfile_path = "D:/Image_Data/Pascal/test.csv"
@@ -172,10 +199,12 @@ def main():
         train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True)
         validation_loader = torch.utils.data.DataLoader(validation_set, batch_size=batch_size, shuffle=False)
         test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=False)
+        folder_count, contents_count = None, None
 
     train_model(device=device, model=model, model_type=model_type, epochs=epoch, validation_epoch=validation_epoch,
                 learning_rate=learning_rate, patience=patience, train_loader=train_loader,
-                validation_loader=validation_loader, test_loader=test_loader, save_path=save_path)
+                validation_loader=validation_loader, test_loader=test_loader, save_path=save_path,
+                image_count=contents_count)
 
 
 if __name__ == '__main__':
