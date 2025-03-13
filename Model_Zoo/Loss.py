@@ -7,38 +7,39 @@ class CrossEntropyLoss(nn.Module):
     def __init__(self):
         super(CrossEntropyLoss, self).__init__()
 
-    def forward(self, score, target):
-        batch_size = len(score)
-        loss = torch.log(torch.sum(torch.exp(score), dim=1)) - score[range(batch_size), target]
+    def forward(self, y, t):
+        batch_size = y.shape[0]
+
+        log_prob = torch.log_softmax(y, dim=1)
+        loss = -log_prob[range(batch_size), t]
+
         acc_loss = torch.mean(loss)
 
         return acc_loss
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=None, gamma=2, reduction='mean'):
+    def __init__(self, alpha=None, gamma=1):
         super(FocalLoss, self).__init__()
-        self.alpha = alpha
+        if alpha is not None:
+            self.alpha = torch.tensor(alpha)  # alpha를 텐서로 변환
+        else:
+            self.alpha = None
         self.gamma = gamma
-        self.reduction = reduction
 
-    def forward(self, score, target):
-        batch_size = len(score)
+    def forward(self, y, t):
+        batch_size = y.shape[0]
 
-        softmax_score = torch.softmax(score, dim=1)
+        log_prob = torch.log_softmax(y, dim=1)
+        prob = torch.softmax(y, dim=1)
 
-        target_prob = softmax_score[range(batch_size), target]
+        pt = prob[range(batch_size), t]
 
         if self.alpha is not None:
-            loss = -self.alpha[target] * (1 - target_prob) ** self.gamma * torch.log(target_prob)
+            loss = -self.alpha.to(t.device)[t] * (1 - pt) ** self.gamma * log_prob[range(batch_size), t]
         else:
-            loss = - (1 - target_prob) ** self.gamma * torch.log(target_prob)
+            loss = -(1 - pt) ** self.gamma * log_prob[range(batch_size), t]
 
-        if self.reduction == 'mean':
-            acc_loss = torch.mean(loss)
-        elif self.reduction == 'sum':
-            acc_loss = torch.sum(loss)
-        else:
-            acc_loss = loss
-
+        acc_loss = torch.mean(loss)
         return acc_loss
+
