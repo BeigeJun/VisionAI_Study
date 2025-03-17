@@ -19,13 +19,14 @@ class CrossEntropyLoss(nn.Module):
 
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=None, gamma=1):
+    def __init__(self, alpha=None, gamma=1.0, returnValue = None):
         super(FocalLoss, self).__init__()
         if alpha is not None:
             self.alpha = torch.tensor(alpha)  # alpha를 텐서로 변환
         else:
             self.alpha = None
         self.gamma = gamma
+        self.returnValue = returnValue
 
     def forward(self, y, t):
         batch_size = y.shape[0]
@@ -40,6 +41,9 @@ class FocalLoss(nn.Module):
         else:
             loss = -(1 - pt) ** self.gamma * log_prob[range(batch_size), t]
 
-        acc_loss = torch.mean(loss)
+        if self.returnValue == None:
+            acc_loss = loss
+        else:
+            acc_loss = torch.mean(loss)
         return acc_loss
 

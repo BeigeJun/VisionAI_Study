@@ -104,6 +104,7 @@ class Draw_Graph():
                     inputs, labels = inputs.to(device), labels.to(device)
                     outputs = model(inputs)
                     loss = criterion(outputs, labels)
+                    loss = loss.mean()
 
                     val_loss += loss.item()
                     _, predicted = torch.max(outputs.data, 1)
