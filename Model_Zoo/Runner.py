@@ -18,18 +18,17 @@ from Models.Classification.EfficientNet import EfficientNet
 from Models.ObjectDetection.YoloV1 import Yolov1
 from Model_Zoo.Loss import CrossEntropyLoss, FocalLoss
 
+torch.backends.cudnn.enabled = False
 torch.manual_seed(42)
 torch.cuda.manual_seed_all(42)
 
 
-def backward_and_step(losses, optimizer):
+def backward_Data(losses, optimizer):
     if isinstance(losses, list):
-        for l in losses:
-            l.backward(retain_graph=True)  # retain_graph=True를 사용하여 그래프를 유지
-        losses = sum(losses)
+        for loss in losses:
+            loss.backward(retain_graph=True)
+        losses = losses.mean()
     else:
-        if losses.dim() > 0:  # loss가 스칼라가 아니면
-            losses = losses.mean()  # 또는 loss.sum()
         losses.backward()
     optimizer.step()
     return losses
@@ -47,11 +46,11 @@ def train_model(device, model, model_type, epochs, validation_epoch, learning_ra
         counts = []
         count_contents = 0
         for folder, count in image_count.items():
-            print(f"- {folder}: {count}개")
+            #print(f"- {folder}: {count}개")
             counts.append(count)
             count_contents += count
-        counts = [count / count_contents for count in counts]
-        criterion = FocalLoss(counts, 2.0, None)
+        counts = [1 - count / count_contents for count in counts]
+        criterion = FocalLoss()(counts, 2.0, None)
 
     elif model_type == "Object_Detection":
         criterion = YoloLoss()
