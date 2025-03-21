@@ -23,17 +23,6 @@ torch.manual_seed(42)
 torch.cuda.manual_seed_all(42)
 
 
-def backward_Data(losses, optimizer):
-    if isinstance(losses, list):
-        for loss in losses:
-            loss.backward(retain_graph=True)
-        losses = losses.mean()
-    else:
-        losses.backward()
-    optimizer.step()
-    return losses
-
-
 def train_model(device, model, model_type, epochs, validation_epoch, learning_rate, patience, train_loader, validation_loader,
                 test_loader, save_path, image_count):
     graph = Draw_Graph(save_path, patience)
@@ -50,7 +39,7 @@ def train_model(device, model, model_type, epochs, validation_epoch, learning_ra
             counts.append(count)
             count_contents += count
         counts = [1 - count / count_contents for count in counts]
-        criterion = FocalLoss()(counts, 2.0, None)
+        criterion = FocalLoss(counts, 2.0, "Mean")
 
     elif model_type == "Object_Detection":
         criterion = YoloLoss()
@@ -76,7 +65,7 @@ def train_model(device, model, model_type, epochs, validation_epoch, learning_ra
                 optimizer.zero_grad()
                 outputs = model(inputs)
                 loss = criterion(outputs, labels)
-                loss = backward_Data(loss, optimizer)
+                loss.backward()
                 optimizer.step()
 
                 running_loss += loss.item()
