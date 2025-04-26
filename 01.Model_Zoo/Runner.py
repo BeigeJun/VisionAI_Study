@@ -22,7 +22,6 @@ torch.backends.cudnn.enabled = False
 torch.manual_seed(42)
 torch.cuda.manual_seed_all(42)
 
-
 def train_model(device, model, model_type, epochs, validation_epoch, learning_rate, patience, train_loader, validation_loader,
                 test_loader, save_path, image_count):
     graph = Draw_Graph(save_path, patience)
