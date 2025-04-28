@@ -31,7 +31,7 @@ class MNIST_loader(data.Dataset):
         return len(self.data)
 
 
-def get_mnist(args, data_dir='C:/Users/wns20/PycharmProjects/VisionAI_Study/0.Data/MNIST'):
+def get_mnist(args, data_dir='C:/Users/wns20/PycharmProjects/VisionAI_Study/0_Data/MNIST'):
     """get dataloders"""
     # min, max values for each class after applying GCN (as the original implementation)
     min_max = [(-0.8826567065619495, 9.001545489292527),
