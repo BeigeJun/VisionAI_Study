@@ -1,6 +1,6 @@
 import torch
 import torch.nn as nn
-from Model_Zoo.Models.Util.ModelBase import modelbase
+from F_Model_Zoo.Models.Util.ModelBase import modelbase
 from torchvision import transforms
 
 

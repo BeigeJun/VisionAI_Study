@@ -1,7 +1,7 @@
 import torch.nn as nn
 from torchvision import transforms
-from Model_Zoo.Models.Classification.Convolution_Modules import conv_n_layer_block
-from Model_Zoo.Models.Util.ModelBase import modelbase
+from F_Model_Zoo.Models.Classification.Convolution_Modules import conv_n_layer_block
+from F_Model_Zoo.Models.Util.ModelBase import modelbase
 
 
 class VGGNet(modelbase):

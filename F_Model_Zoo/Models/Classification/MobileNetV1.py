@@ -1,8 +1,8 @@
 import torch.nn as nn
 
-from Model_Zoo.Models.Classification.Convolution_Modules import DepthWiseSeparableConv
-from Model_Zoo.Models.Classification.Convolution_Modules import conv_separable
-from Model_Zoo.Models.Util.ModelBase import modelbase
+from F_Model_Zoo.Models.Classification.Convolution_Modules import DepthWiseSeparableConv
+from F_Model_Zoo.Models.Classification.Convolution_Modules import conv_separable
+from F_Model_Zoo.Models.Util.ModelBase import modelbase
 
 
 class MobileNetV1(modelbase):

@@ -1,9 +1,9 @@
 import math
 import torch.nn as nn
 from torchvision import transforms
-from Model_Zoo.Models.Classification.Convolution_Modules import _make_divisible
-from Model_Zoo.Models.Classification.Convolution_Modules import MBconv
-from Model_Zoo.Models.Util.ModelBase import modelbase
+from F_Model_Zoo.Models.Classification.Convolution_Modules import _make_divisible
+from F_Model_Zoo.Models.Classification.Convolution_Modules import MBconv
+from F_Model_Zoo.Models.Util.ModelBase import modelbase
 
 
 class EfficientNet(modelbase):
