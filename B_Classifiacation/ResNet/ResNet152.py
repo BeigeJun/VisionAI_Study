@@ -98,17 +98,18 @@ class ResidualBlock(nn.Module):
         self.use_downsample = False
         self.relu = nn.ReLU(inplace=True)
 
-        if stride != 1 or in_put != out_put * self.expansion:
+        if stride != 1 or in_put != out_put * expansion:
             self.use_downsample = True
 
     def forward(self, x):
-        out = self.conv1x1_1(x)
+        in_put = x
+        out = self.conv1x1_1(in_put)
         out = self.conv3x3(out)
         out = self.conv1x1_2(out)
 
         if self.use_downsample:
-            down_out = self.downsample(x)
-            out += down_out
+            in_put = self.downsample(in_put)
+        out += in_put
         out = self.relu(out)
         return out
 
