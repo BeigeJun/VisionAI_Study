@@ -1,6 +1,5 @@
-import yaml
-from torchvision import transforms
 from B_Classifiacation.Util.Util import *
+from B_Classifiacation.Util.Draw_Graph import *
 
 class ResNet152(nn.Module):
     def __init__(self,  num_class=10):
@@ -124,14 +123,14 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = ResNet152(num_class=config['num_class']).to(device)
 
+    graph = Draw_Graph(save_path=config['save_path'], n_patience=config['patience'])
+
     transform_info = model.return_transform_info()
     train_loader, validation_loader, test_loader = classification_data_loader(config['load_path'],
                                                                               config['batch_size'], transform_info)
 
-    train_model(device=device, model=model, model_type=config['model_type'], epochs=config['epoch'],
-                validation_epoch=config['validation_epoch'], learning_rate=config['learning_rate'],
-                patience=config['patience'], train_loader=train_loader, validation_loader=validation_loader,
-                test_loader=test_loader, save_path=config['save_path'])
+    train_model(device=device, model=model, epochs=config['epoch'], patience=config['patience'], train_loader=train_loader,
+                val_loader=validation_loader, test_loader=test_loader, lr=0.001, graph=graph)
 
 if __name__ == "__main__":
     main()
