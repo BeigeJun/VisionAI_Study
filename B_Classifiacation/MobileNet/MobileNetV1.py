@@ -104,7 +104,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = MobileNetV1(num_class=config['num_class']).to(device)
 
-    graph = Draw_Graph(save_path=config['save_path'], n_patience=config['patience'])
+    graph = Draw_Graph(save_path=config['save_path'], patience=config['patience'])
 
     transform_info = model.return_transform_info()
     train_loader, validation_loader, test_loader = classification_data_loader(config['load_path'],

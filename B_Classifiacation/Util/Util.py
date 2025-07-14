@@ -76,14 +76,14 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
         val_acc = 100 * correct_val / total_val
         val_loss = val_loss / len(val_loader)
 
-        graph.update_acc_and_loss(
-            model=model,
-            train_acc=train_acc,
-            train_loss=train_loss,
-            validation_acc=val_acc,
-            validation_loss=val_loss,
-            epoch=epoch
-        )
+        # graph.update_acc_and_loss(
+        #     model=model,
+        #     train_acc=train_acc,
+        #     train_loss=train_loss,
+        #     validation_acc=val_acc,
+        #     validation_loss=val_loss,
+        #     epoch=epoch
+        # )
 
         if val_acc > best_val_acc:
             best_val_acc = val_acc
@@ -95,9 +95,9 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
                 print(f'Early stopping at epoch {epoch + 1}')
                 break
 
-        if (epoch + 1) % graph_update_epoch == 0:
-            graph.update_graph()
-            graph.save_plt()
+        # if (epoch + 1) % graph_update_epoch == 0:
+        #     graph.update_graph()
+        #     graph.save_plt()
 
         pbar.set_postfix({
             'Epoch': epoch + 1,
@@ -109,11 +109,11 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
         })
         pbar.update(1)
 
-    graph.save_plt()
-    graph.save_train_info(patience_count)
+    # graph.save_plt()
+    # graph.save_train_info(patience_count)
 
-    best_model_path = os.path.join(graph.str_save_path, 'Best_Model.pth')
-    model.load_state_dict(torch.load(best_model_path))
+    # best_model_path = os.path.join(graph.str_save_path, 'Best_Model.pth')
+    # model.load_state_dict(torch.load(best_model_path))
 
     model.eval()
     correct_test = 0
@@ -130,8 +130,8 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
     test_acc = 100 * correct_test / total_test
     print(f'Final Test Accuracy: {test_acc:.2f}%')
 
-    graph.save_test_info(
-        total=total_test,
-        correct=correct_test,
-        accuracy=test_acc
-    )
+    # graph.save_test_info(
+    #     total=total_test,
+    #     correct=correct_test,
+    #     accuracy=test_acc
+    # )

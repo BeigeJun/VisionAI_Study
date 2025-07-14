@@ -3,6 +3,9 @@ import torch
 import matplotlib.pyplot as plt
 from F_Model_Zoo.Models.ObjectDetection.Util.Utils import mAP, get_bboxes
 
+
+# 필요 기능 : 그래프 생성(O), 그래프 업데이트(X), 모델 저장(O), 학습 정보 저장(O), 결과 정보 저장(O), 그래프 이미지 저장(X)
+
 class Draw_Graph():
     def __init__(self, save_path, patience):
         self.patience = patience
@@ -26,16 +29,44 @@ class Draw_Graph():
 
         os.makedirs(save_path, exist_ok=True)
 
+        # 그래프 생성(O)
         plt.ion()
         self.fig, self.axs = plt.subplots(1, 2, figsize=(16, 4))
 
-    def save_plt(self):
-        plt.savefig(self.save_path + '//training_validation_graphs.png')
-        plt.close()
-
-    def save_model(self, model, save_type='Best_Accuracy_Train_MLP'):
+    # 모델 저장(O)
+    def save_model(self, model, save_type='Best_Accuracy_Train'):
         model_path_make = self.save_path + '//' + save_type + '.pth'
         torch.save(model.state_dict(), model_path_make)
+
+    # 그래프 이미지 저장
+    def save_plt(self):
+        plt.savefig(self.save_path + '//Graphs.png')
+        plt.close()
+
+    # 학습 정보 저장(O)
+    def save_train_info(self, patience_count):
+        self.save_plt()
+        with open(self.save_path + '//Trian_Info.txt', "w") as file:
+            file.write(
+                f"Top Accuracy Train Epoch : {self.top_accuracy_train_epoch} Accuracy : {self.top_accuracy_train}\n"
+                f"Top Accuracy Validation Epoch : {self.top_accuracy_validation_epoch} Accuracy : {self.top_accuracy_validation}\n"
+                f"Bottom Loss Train Epoch : {self.bottom_loss_train_epoch} Loss : {self.bottom_loss_train}\n"
+                f"Bottom Loss Validation Epoch : {self.bottom_loss_validation_epoch} Loss : {self.bottom_loss_validation}\n"
+                f"Patience Count : {patience_count}/{self.patience}\n")
+
+    # 결과 정보 저장(O)
+    def save_test_info(self, total, correct, accuracy):
+        self.save_plt()
+        with open(self.save_path + '//Test_Result.txt', "w") as file:
+            file.write(f"Total Num : {total}, Correct Num : {correct}\n"
+                       f"Accuracy : {accuracy}")
+
+
+
+
+
+
+
 
     def append_train_losses_and_acc(self, loss, acc):
         self.train_losses.append(loss)
@@ -52,11 +83,11 @@ class Draw_Graph():
     def save_train_best_model_info(self, model, epoch, train_accuracy, train_loss):
         if self.top_accuracy_train < train_accuracy:
             self.update_train_losses_or_acc(train_accuracy, epoch, choose_mode="acc")
-            self.save_model(model, save_type='Best_Accuracy_Train_MLP')
+            self.save_model(model, save_type='Best_Accuracy_Train')
 
         if self.bottom_loss_train > train_loss:
             self.update_train_losses_or_acc(train_loss, epoch, choose_mode="loss")
-            self.save_model(model, save_type='Bottom_Loss_Train_MLP')
+            self.save_model(model, save_type='Bottom_Loss_Train')
 
     def update_validation_losses_or_acc(self, updated_item, epoch, choose_mode="loss"):
         if choose_mode == "loss":
@@ -69,65 +100,34 @@ class Draw_Graph():
     def save_validation_best_model_info(self, model, epoch, patience_count):
         if self.bottom_loss_validation > self.val_losses[-1]:
             self.update_validation_losses_or_acc(self.val_losses[-1], epoch, choose_mode="loss")
-            self.save_model(model, save_type='Bottom_Loss_Validation_MLP')
+            self.save_model(model, save_type='Bottom_Loss_Validation')
             return 0
 
         if self.top_accuracy_validation < self.val_accuracies[-1]:
             self.update_validation_losses_or_acc(self.val_accuracies[-1], epoch, choose_mode="acc")
-            self.save_model(model, save_type='Best_Accuracy_Validation_MLP')
+            self.save_model(model, save_type='Best_Accuracy_Validation')
             return patience_count
 
-    def save_train_info(self, patience_count):
-        plt.savefig(self.save_path + '//training_validation_graphs.png')
-        with open(self.save_path + '//numbers.txt', "w") as file:
-            file.write(
-                f"Top Accuracy Train Epoch : {self.top_accuracy_train_epoch} Accuracy : {self.top_accuracy_train}\n"
-                f"Top Accuracy Validation Epoch : {self.top_accuracy_validation_epoch} Accuracy : {self.top_accuracy_validation}\n"
-                f"Bottom Loss Train Epoch : {self.bottom_loss_train_epoch} Loss : {self.bottom_loss_train}\n"
-                f"Bottom Loss Validation Epoch : {self.bottom_loss_validation_epoch} Loss : {self.bottom_loss_validation}\n"
-                f"Patience Count : {patience_count}/{self.patience}\n")
 
-    def save_test_info(self, total, correct, accuracy):
-        with open(self.save_path + '//Test_Result.txt', "w") as file:
-            file.write(f"Total Num : {total}, Correct Num : {correct}\n"
-                       f"Accuracy : {accuracy}")
-
-    def update_graph(self, model, device, validation_loader, criterion, epoch, model_type):
+    def update_graph(self, model, device, validation_loader, criterion, epoch):
         model.eval()
         val_loss = 0.0
 
-        if model_type == "Classification":
-            correct_val = 0
-            total_val = 0
-            with torch.no_grad():
-                for inputs, labels in validation_loader:
-                    inputs, labels = inputs.to(device), labels.to(device)
-                    outputs = model(inputs)
-                    loss = criterion(outputs, labels)
-                    loss = loss.mean()
+        correct_val = 0
+        total_val = 0
+        with torch.no_grad():
+            for inputs, labels in validation_loader:
+                inputs, labels = inputs.to(device), labels.to(device)
+                outputs = model(inputs)
+                loss = criterion(outputs, labels)
+                loss = loss.mean()
 
-                    val_loss += loss.item()
-                    _, predicted = torch.max(outputs.data, 1)
-                    total_val += labels.size(0)
-                    correct_val += (predicted == labels).sum().item()
+                val_loss += loss.item()
+                _, predicted = torch.max(outputs.data, 1)
+                total_val += labels.size(0)
+                correct_val += (predicted == labels).sum().item()
 
-            val_accuracy = correct_val / total_val
-
-        elif model_type == "Object_Detection":
-            with torch.no_grad():
-                for inputs, labels in validation_loader:
-                    inputs, labels = inputs.to(device), labels.to(device)
-                    outputs = model(inputs)
-                    loss = criterion(outputs, labels)
-                    val_loss += loss.item()
-
-            # Calculate validation mAP
-            pred_boxes, target_boxes = get_bboxes(
-                validation_loader, model, iou_threshold=0.5, threshold=0.4, device=device
-            )
-            val_accuracy = mAP(
-                pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint"
-            )
+        val_accuracy = correct_val / total_val
 
         self.val_losses.append(val_loss / len(validation_loader))
         self.val_accuracies.append(val_accuracy)
@@ -140,9 +140,8 @@ class Draw_Graph():
         self.axs[0].plot(range(10, epoch + 2, 10), self.val_accuracies, label='Validation Accuracy', color='blue',
                          linewidth=0.5)
         self.axs[0].set_xlabel('Epochs')
-        self.axs[0].set_ylabel('Accuracy' if model_type == "Classification" else 'mAP')
-        self.axs[0].set_title(
-            'Training and Validation Accuracy' if model_type == "Classification" else 'Training and Validation mAP')
+        self.axs[0].set_ylabel('Accuracy')
+        self.axs[0].set_title('Training and Validation Accuracy')
         self.axs[0].legend()
 
         self.axs[1].plot(range(10, epoch + 2, 10), self.train_losses, label='Train Loss', color='red', linewidth=0.5)
