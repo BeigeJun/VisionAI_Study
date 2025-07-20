@@ -6,6 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms
 from torchvision.datasets import ImageFolder
+from D_AnomalyDetection.Util.Loss import SSIM
 
 def anomalydetection_data_loader(str_path, batch_size, info):
     transform_info = info
@@ -22,7 +23,11 @@ def anomalydetection_data_loader(str_path, batch_size, info):
 
 
 def train_model(device, model, train_loader, val_loader, test_loader, graph, epochs=20, lr=0.001, patience=5, graph_update_epoch = 10):
-    criterion = nn.CrossEntropyLoss()
+    if model.model_name == "AutoEncoder":
+        criterion = SSIM()
+    else :
+        criterion = nn.CrossEntropyLoss()
+
     optimizer = optim.Adam(model.parameters(), lr=lr)
     best_val_acc = 0
     patience_count = 0
@@ -40,11 +45,13 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
 
             optimizer.zero_grad()
             outputs = model(inputs)
-            loss = criterion(outputs, labels)
+            loss = criterion(inputs, outputs)
             loss.backward()
             optimizer.step()
 
+            #AutoEncoder는 train, validation ACC 랑 validation Loss를 사용 안함. 변경 필요
             train_loss += loss.item()
+
             _, predicted = outputs.max(1)
             total += labels.size(0)
             correct += predicted.eq(labels).sum().item()

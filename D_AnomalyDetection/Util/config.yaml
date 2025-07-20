@@ -1,5 +1,5 @@
-load_path : 'D://Pascal//Classification_DataSet//2_2Class//DataSet'
-save_path : 'D://Model_Save_Folder'
+load_path : 'D://1-2. MvTec_Anomaly//1.Bottel'
+save_path : 'D://0. Model_Save_Folder'
 
 epoch : 100
 patience : 20
