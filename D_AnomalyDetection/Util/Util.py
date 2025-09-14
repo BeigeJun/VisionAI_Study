@@ -29,7 +29,7 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
         criterion = nn.CrossEntropyLoss()
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    best_val_acc = 0
+    Worst_val_loss = 100
     patience_count = 0
 
     pbar = tqdm(total=epochs, desc='Total Progress', position=0)
@@ -49,14 +49,14 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
             loss.backward()
             optimizer.step()
 
-            #AutoEncoder는 train, validation ACC 랑 validation Loss를 사용 안함. 변경 필요
+            # #AutoEncoder는 train, validation ACC 랑 validation Loss를 사용 안함. 변경 필요
             train_loss += loss.item()
+            #
+            # _, predicted = outputs.max(1)
+            # total += labels.size(0)
+            # correct += predicted.eq(labels).sum().item()
 
-            _, predicted = outputs.max(1)
-            total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
-
-        train_acc = 100 * correct / total
+        #train_acc = 100 * correct / total
         train_loss = train_loss / len(train_loader)
 
         model.eval()
@@ -68,27 +68,27 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
             for inputs, labels in val_loader:
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = model(inputs)
-                loss = criterion(outputs, labels)
+                loss = criterion(outputs, outputs)
 
                 val_loss += loss.item()
-                _, predicted = outputs.max(1)
-                total_val += labels.size(0)
-                correct_val += predicted.eq(labels).sum().item()
+                #_, predicted = outputs.max(1)
+                #total_val  += labels.size(0)
+                #correct_val += predicted.eq(labels).sum().item()
 
-        val_acc = 100 * correct_val / total_val
+        #val_acc = 100 * correct_val / total_val
         val_loss = val_loss / len(val_loader)
 
         graph.update_acc_and_loss(
             model=model,
-            train_acc=train_acc,
+            train_acc=100,
             train_loss=train_loss,
-            validation_acc=val_acc,
+            validation_acc=100,
             validation_loss=val_loss,
             epoch=epoch
         )
 
-        if val_acc > best_val_acc:
-            best_val_acc = val_acc
+        if val_loss < Worst_val_loss:
+            Worst_val_loss = val_loss
             patience_count = 0
 
         else:
@@ -103,11 +103,11 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
 
         pbar.set_postfix({
             'Epoch': epoch + 1,
-            'Train Acc': f'{train_acc:.2f}%',
+            'Train Acc': f'{100:.2f}%',
             'Train Loss': f'{train_loss:.4f}',
-            'Val Acc': f'{val_acc:.2f}%',
+            'Val Acc': f'{100:.2f}%',
             'Val Loss': f'{val_loss:.4f}',
-            'Best Val Acc': f'{best_val_acc:.2f}%'
+            'Worst Val Loss': f'{Worst_val_loss:.2f}%'
         })
         pbar.update(1)
 
@@ -118,16 +118,33 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
     model.load_state_dict(torch.load(best_model_path))
 
     model.eval()
+
+    lstLosses = []
+    for inputs, labels in train_loader:
+        inputs, labels = inputs.to(device), labels.to(device)
+
+        optimizer.zero_grad()
+        outputs = model(inputs)
+        loss = criterion(inputs, outputs)
+        lstLosses.append(loss)
+
+    model.Threshold = max(lstLosses)
+
     correct_test = 0
     total_test = 0
+    Predict_results = []
 
     with torch.no_grad():
         for inputs, labels in test_loader:
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
-            _, predicted = outputs.max(1)
+
+            loss = criterion(inputs, outputs)
+            batch_preds = (loss <= model.Threshold).long()  # 텐서(batch_size,), 1 or 0
+            correct_test += (batch_preds == labels).sum().item()
             total_test += labels.size(0)
-            correct_test += predicted.eq(labels).sum().item()
+
+            Predict_results.extend(batch_preds.cpu().tolist())
 
     test_acc = 100 * correct_test / total_test
     print(f'Final Test Accuracy: {test_acc:.2f}%')

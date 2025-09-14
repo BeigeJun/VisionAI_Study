@@ -13,6 +13,7 @@ class AutoEncoder(nn.Module):
         self.model_name = "AutoEncoder"
         self.network = []
         self.EncoderDecoder = self.create_network(self.resize_size)
+        self.Threshold = 0.0
 
     def create_network(self, resize_size):
         #256, 256, 3을 기준으로 계산
@@ -53,9 +54,9 @@ class AutoEncoder(nn.Module):
         self.network.append(nn.ConvTranspose2d(100, channel, kernel_size=10, stride=1, padding=0)) # 8. (16, 16, 64)
         self.network.append(nn.LeakyReLU(0.2, inplace=True))
 
-        while row == resize_size[0] / 2 and col == resize_size[1] / 2 :
+        while int(row) != int(resize_size[0] / 2) and int(col) != int(resize_size[1] / 2) :
             # 가로, 세로 *2
-            self.network.append(nn.ConvTranspose2d(channel, int(channel/2), kernel_size=4, stride=2, padding=1)) # 9. (32, 32, 32), # 11. (64, 64, 16), # 12. (128, 128, 8)
+            self.network.append(nn.ConvTranspose2d(int(channel), int(channel/2), kernel_size=4, stride=2, padding=1)) # 9. (32, 32, 32), # 11. (64, 64, 16), # 12. (128, 128, 8)
             self.network.append(nn.LeakyReLU(0.2, inplace=True))
 
             # 가로, 세로 그대로
@@ -66,7 +67,7 @@ class AutoEncoder(nn.Module):
             col *= 2
             channel /= 2
 
-        self.network.append(nn.ConvTranspose2d(channel, 3, kernel_size=4, stride=2, padding=1))  # 14. (256, 256, 3)
+        self.network.append(nn.ConvTranspose2d(int(channel), 3, kernel_size=4, stride=2, padding=1))  # 14. (256, 256, 3)
         self.network.append(nn.Sigmoid())
 
         return nn.Sequential(*self.network)
