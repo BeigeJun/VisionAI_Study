@@ -8,6 +8,16 @@ from torchvision import transforms
 from torchvision.datasets import ImageFolder
 from D_AnomalyDetection.Util.Loss import SSIM
 
+def save_batch_images(images, folder_path, prefix='output', n=4):
+    os.makedirs(folder_path, exist_ok=True)
+    to_pil = transforms.ToPILImage()
+
+    images = images[:n].cpu().detach()
+    for i, img_tensor in enumerate(images):
+        pil_img = to_pil(img_tensor)
+        save_path = os.path.join(folder_path, f'{prefix}_{i}.png')
+        pil_img.save(save_path)
+
 def anomalydetection_data_loader(str_path, batch_size, info):
     transform_info = info
 
@@ -22,14 +32,14 @@ def anomalydetection_data_loader(str_path, batch_size, info):
     return train_loader, validation_loader, test_loader
 
 
-def train_model(device, model, train_loader, val_loader, test_loader, graph, epochs=20, lr=0.001, patience=5, graph_update_epoch = 10):
+def train_model(device, model, train_loader, val_loader, test_loader, graph, epochs=20, lr=0.01, patience=5, graph_update_epoch = 1):
     if model.model_name == "AutoEncoder":
         criterion = SSIM()
     else :
         criterion = nn.CrossEntropyLoss()
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
-    Worst_val_loss = 100
+    Best_val_loss = 100
     patience_count = 0
 
     pbar = tqdm(total=epochs, desc='Total Progress', position=0)
@@ -49,6 +59,8 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
             loss.backward()
             optimizer.step()
 
+            save_batch_images(outputs, folder_path='D://0. Model_Save_Folder//output_images', prefix=f'epoch_{epoch}')
+
             # #AutoEncoder는 train, validation ACC 랑 validation Loss를 사용 안함. 변경 필요
             train_loss += loss.item()
             #
@@ -66,29 +78,16 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
 
         with torch.no_grad():
             for inputs, labels in val_loader:
-                inputs, labels = inputs.to(device), labels.to(device)
+                inputs = inputs.to(device)
                 outputs = model(inputs)
-                loss = criterion(outputs, outputs)
-
+                loss = criterion(inputs, outputs)
                 val_loss += loss.item()
-                #_, predicted = outputs.max(1)
-                #total_val  += labels.size(0)
-                #correct_val += predicted.eq(labels).sum().item()
 
         #val_acc = 100 * correct_val / total_val
         val_loss = val_loss / len(val_loader)
 
-        graph.update_acc_and_loss(
-            model=model,
-            train_acc=100,
-            train_loss=train_loss,
-            validation_acc=100,
-            validation_loss=val_loss,
-            epoch=epoch
-        )
-
-        if val_loss < Worst_val_loss:
-            Worst_val_loss = val_loss
+        if val_loss < Best_val_loss:
+            Best_val_loss = val_loss
             patience_count = 0
 
         else:
@@ -98,16 +97,23 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
                 break
 
         if (epoch + 1) % graph_update_epoch == 0:
-            graph.update_graph()
+            graph.update_graph(
+                train_acc=100,
+                train_loss=train_loss,
+                val_acc=100,
+                val_loss=val_loss,
+                epoch=epoch,
+                patience_count=patience_count
+            )
             graph.save_plt()
 
         pbar.set_postfix({
             'Epoch': epoch + 1,
-            'Train Acc': f'{100:.2f}%',
+            # 'Train Acc': f'{100:.2f}%',
             'Train Loss': f'{train_loss:.4f}',
-            'Val Acc': f'{100:.2f}%',
+            # 'Val Acc': f'{100:.2f}%',
             'Val Loss': f'{val_loss:.4f}',
-            'Worst Val Loss': f'{Worst_val_loss:.2f}%'
+            'Best Val Loss': f'{Best_val_loss:.2f}%'
         })
         pbar.update(1)
 
@@ -120,14 +126,15 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
     model.eval()
 
     lstLosses = []
-    for inputs, labels in train_loader:
-        inputs, labels = inputs.to(device), labels.to(device)
+    model.eval()
+    with torch.no_grad():
+        for inputs, labels in train_loader:
+            inputs = inputs.to(device)
+            outputs = model(inputs)
 
-        optimizer.zero_grad()
-        outputs = model(inputs)
-        loss = criterion(inputs, outputs)
-        lstLosses.append(loss)
-
+            for i in range(inputs.size(0)):
+                loss = criterion(inputs[i:i + 1], outputs[i:i + 1])
+                lstLosses.append(loss.item())
     model.Threshold = max(lstLosses)
 
     correct_test = 0
@@ -139,12 +146,12 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
 
-            loss = criterion(inputs, outputs)
-            batch_preds = (loss <= model.Threshold).long()  # 텐서(batch_size,), 1 or 0
-            correct_test += (batch_preds == labels).sum().item()
-            total_test += labels.size(0)
-
-            Predict_results.extend(batch_preds.cpu().tolist())
+            for i in range(inputs.size(0)):
+                loss = criterion(inputs[i:i + 1], outputs[i:i + 1])
+                pred = 0 if loss > model.Threshold else 1
+                Predict_results.append(pred)
+                correct_test += (pred == labels[i].item())
+                total_test += 1
 
     test_acc = 100 * correct_test / total_test
     print(f'Final Test Accuracy: {test_acc:.2f}%')
