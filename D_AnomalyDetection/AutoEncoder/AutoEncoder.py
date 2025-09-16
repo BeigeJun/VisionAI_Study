@@ -16,58 +16,72 @@ class AutoEncoder(nn.Module):
         self.Threshold = 0.0
 
     def create_network(self, resize_size):
-        #256, 256, 3을 기준으로 계산
-        row = resize_size[0]
-        col = resize_size[1]
         input_channel = 3
         channel = 4
+        patch_size = resize_size[0]
 
-        # 가로, 세로 1/2
-        self.network.append(nn.Conv2d(input_channel, channel * 2, kernel_size=4, stride=2, padding=1))  # 1. (128, 128, 8)
+        # Encoder part
+        self.network.append(nn.Conv2d(input_channel, channel, kernel_size=4, stride=2, padding=1))  # 256->128
         self.network.append(nn.LeakyReLU(0.2, inplace=True))
 
-        # 가로, 세로 그대로
-        self.network.append(nn.Conv2d(channel * 2, channel * 2, kernel_size=3, stride=1, padding=1))  # 2. (128, 128, 8)
+        self.network.append(nn.Conv2d(channel, channel, kernel_size=4, stride=2, padding=1))  # 128->64
         self.network.append(nn.LeakyReLU(0.2, inplace=True))
 
-        # 채널 증폭 및 이미지 크기 계산
-        row /= 2
-        col /= 2
-        channel *= 2
-        while row > 20 and col > 20 :
-
-            #가로, 세로 /2
-            self.network.append(nn.Conv2d(channel, channel * 2, kernel_size=4, stride=2, padding=1)) # 3. (64, 64, 16) -> 5. (32, 32, 32) -> 7. (16, 16, 64)
+        if patch_size == 256:
+            self.network.append(nn.Conv2d(channel, channel, kernel_size=4, stride=2, padding=1))  # 64->32
             self.network.append(nn.LeakyReLU(0.2, inplace=True))
 
-            #가로, 세로 그대로
-            self.network.append(nn.Conv2d(channel * 2, channel * 2, kernel_size=3, stride=1, padding=1)) # 4. (64, 64, 16) -> 6. (32, 32, 32) -> 8. (16, 16, 64)
-            self.network.append(nn.LeakyReLU(0.2, inplace=True))
-
-            # 채널 증폭 및 이미지 크기 계산
-            row /= 2
-            col /= 2
-            channel *= 2
-
-        self.network.append(nn.Conv2d(channel, 100, kernel_size=10, stride=1, padding=0)) # 9. (7, 7, 100)
-
-        self.network.append(nn.ConvTranspose2d(100, channel, kernel_size=10, stride=1, padding=0)) # 8. (16, 16, 64)
+        self.network.append(nn.Conv2d(channel, channel, kernel_size=3, stride=1, padding=1))
         self.network.append(nn.LeakyReLU(0.2, inplace=True))
 
-        while int(row) != int(resize_size[0] / 2) and int(col) != int(resize_size[1] / 2) :
-            # 가로, 세로 *2
-            self.network.append(nn.ConvTranspose2d(int(channel), int(channel/2), kernel_size=4, stride=2, padding=1)) # 9. (32, 32, 32), # 11. (64, 64, 16), # 12. (128, 128, 8)
+        self.network.append(nn.Conv2d(channel, channel * 2, kernel_size=4, stride=2, padding=1))  # Downsample
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        self.network.append(nn.Conv2d(channel * 2, channel * 2, kernel_size=3, stride=1, padding=1))
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        self.network.append(nn.Conv2d(channel * 2, channel * 4, kernel_size=4, stride=2, padding=1))
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        self.network.append(nn.Conv2d(channel * 4, channel * 2, kernel_size=3, stride=1, padding=1))
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        self.network.append(nn.Conv2d(channel * 2, channel, kernel_size=3, stride=1, padding=1))
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        self.network.append(nn.Conv2d(channel, 100, kernel_size=8, stride=1, padding=0))  # encoded layer
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        # Decoder part
+        self.network.append(nn.ConvTranspose2d(100, channel, kernel_size=8, stride=1, padding=0))
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        self.network.append(nn.Conv2d(channel, channel * 2, kernel_size=3, stride=1, padding=1))
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        self.network.append(nn.Conv2d(channel * 2, channel * 4, kernel_size=3, stride=1, padding=1))
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        self.network.append(nn.ConvTranspose2d(channel * 4, channel * 2, kernel_size=4, stride=2, padding=1))
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        self.network.append(nn.Conv2d(channel * 2, channel * 2, kernel_size=3, stride=1, padding=1))
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        self.network.append(nn.ConvTranspose2d(channel * 2, channel, kernel_size=4, stride=2, padding=1))
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        self.network.append(nn.Conv2d(channel, channel, kernel_size=3, stride=1, padding=1))
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        self.network.append(nn.ConvTranspose2d(channel, channel, kernel_size=4, stride=2, padding=1))
+        self.network.append(nn.LeakyReLU(0.2, inplace=True))
+
+        if patch_size == 256:
+            self.network.append(nn.ConvTranspose2d(channel, channel, kernel_size=4, stride=2, padding=1))
             self.network.append(nn.LeakyReLU(0.2, inplace=True))
 
-            # 가로, 세로 그대로
-            self.network.append(nn.ConvTranspose2d(int(channel/2), int(channel/2), kernel_size=3, stride=1, padding=1)) #10. (32, 32, 32), # 11. (64, 64, 12), # 13. (128, 128, 8)
-            self.network.append(nn.LeakyReLU(0.2, inplace=True))
-
-            row *= 2
-            col *= 2
-            channel /= 2
-
-        self.network.append(nn.ConvTranspose2d(int(channel), 3, kernel_size=4, stride=2, padding=1))  # 14. (256, 256, 3)
+        self.network.append(nn.ConvTranspose2d(channel, input_channel, kernel_size=4, stride=2, padding=1))
         self.network.append(nn.Sigmoid())
 
         return nn.Sequential(*self.network)
