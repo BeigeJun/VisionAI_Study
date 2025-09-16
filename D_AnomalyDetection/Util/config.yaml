@@ -3,6 +3,6 @@ save_path : 'D://0. Model_Save_Folder'
 
 epoch : 100
 patience : 20
-batch_size : 4
+batch_size : 1
 
 num_class : 2

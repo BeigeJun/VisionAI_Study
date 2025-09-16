@@ -37,6 +37,7 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
         criterion = SSIM()
     else :
         criterion = nn.CrossEntropyLoss()
+        #criterion = nn.MSELoss()
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
     Best_val_loss = 100
@@ -58,7 +59,6 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
             loss = criterion(inputs, outputs)
             loss.backward()
             optimizer.step()
-
             save_batch_images(outputs, folder_path='D://0. Model_Save_Folder//output_images', prefix=f'epoch_{epoch}')
 
             # #AutoEncoder는 train, validation ACC 랑 validation Loss를 사용 안함. 변경 필요

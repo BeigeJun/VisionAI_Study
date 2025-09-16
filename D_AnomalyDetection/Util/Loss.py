@@ -39,7 +39,7 @@ class SSIM(nn.Module):
         # return torch.clamp((SSIM_n / SSIM_d) / 2, 0, 1)
 
         # Loss function
-        ssim_map = torch.clamp((1 - SSIM_n / SSIM_d) / 2, 0, 1)
+        ssim_map = (SSIM_n / SSIM_d).clamp(0, 1)
         ssim_score = ssim_map.mean()
         loss = 1 - ssim_score
         return loss
