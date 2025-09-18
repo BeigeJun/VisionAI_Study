@@ -45,11 +45,20 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
 
     pbar = tqdm(total=epochs, desc='Total Progress', position=0)
 
+    lstTrainLosses = []
+    lstValLosses = []
+    lstValPredictLabel = []
+    fMaxLoss = 0.0
+
     for epoch in range(epochs):
         model.train()
         train_loss = 0.0
         correct = 0
         total = 0
+
+        lstTrainLosses.clear()
+        lstValLosses.clear()
+        lstValPredictLabel.clear()
 
         for inputs, labels in train_loader:
             inputs, labels = inputs.to(device), labels.to(device)
@@ -59,17 +68,14 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
             loss = criterion(inputs, outputs)
             loss.backward()
             optimizer.step()
-            save_batch_images(outputs, folder_path='D://0. Model_Save_Folder//output_images', prefix=f'epoch_{epoch}')
 
-            # #AutoEncoder는 train, validation ACC 랑 validation Loss를 사용 안함. 변경 필요
-            train_loss += loss.item()
-            #
-            # _, predicted = outputs.max(1)
-            # total += labels.size(0)
-            # correct += predicted.eq(labels).sum().item()
+            save_batch_images(outputs, folder_path='D://0. Model_Save_Folder//output_images',
+                              prefix=f'epoch_{epoch}',n=len(inputs))
 
-        #train_acc = 100 * correct / total
-        train_loss = train_loss / len(train_loader)
+            lstTrainLosses.append(loss.item())
+
+        train_loss = sum(lstTrainLosses) / len(lstTrainLosses)
+        fMaxLoss = max(lstTrainLosses)
 
         model.eval()
         val_loss = 0.0
@@ -77,14 +83,21 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
         total_val = 0
 
         with torch.no_grad():
+            nCount = 0
             for inputs, labels in val_loader:
                 inputs = inputs.to(device)
                 outputs = model(inputs)
                 loss = criterion(inputs, outputs)
-                val_loss += loss.item()
+                lstValLosses.append(loss.item())
 
-        #val_acc = 100 * correct_val / total_val
-        val_loss = val_loss / len(val_loader)
+                if fMaxLoss > lstValLosses[nCount]:
+                    lstValPredictLabel.append(0)
+                else:
+                    lstValPredictLabel.append(1)
+                nCount+=1
+
+        val_acc = 100 * lstValPredictLabel.count(0) / len(lstValPredictLabel)
+        val_loss = sum(lstValLosses) / len(lstValLosses)
 
         if val_loss < Best_val_loss:
             Best_val_loss = val_loss
@@ -100,7 +113,7 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
             graph.update_graph(
                 train_acc=100,
                 train_loss=train_loss,
-                val_acc=100,
+                val_acc=val_acc,
                 val_loss=val_loss,
                 epoch=epoch,
                 patience_count=patience_count
@@ -111,9 +124,9 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
             'Epoch': epoch + 1,
             # 'Train Acc': f'{100:.2f}%',
             'Train Loss': f'{train_loss:.4f}',
-            # 'Val Acc': f'{100:.2f}%',
+            'Val Acc': f'{val_acc:.2f}%',
             'Val Loss': f'{val_loss:.4f}',
-            'Best Val Loss': f'{Best_val_loss:.2f}%'
+            'Best Val Loss': f'{Best_val_loss:.8f}'
         })
         pbar.update(1)
 
@@ -127,14 +140,16 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
 
     lstLosses = []
     model.eval()
+
     with torch.no_grad():
-        for inputs, labels in train_loader:
+        for inputs, labels in val_loader:
             inputs = inputs.to(device)
             outputs = model(inputs)
 
             for i in range(inputs.size(0)):
                 loss = criterion(inputs[i:i + 1], outputs[i:i + 1])
                 lstLosses.append(loss.item())
+
     model.Threshold = max(lstLosses)
 
     correct_test = 0

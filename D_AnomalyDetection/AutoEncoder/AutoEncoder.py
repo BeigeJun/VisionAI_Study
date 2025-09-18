@@ -36,7 +36,7 @@ class AutoEncoder(nn.Module):
         col /= 2
         channel *= 2
         while row > 20 and col > 20:
-            # 가로, 세로 /2
+            # 가로, 세로 1/2
             self.network.append(nn.Conv2d(channel, channel * 2, kernel_size=4, stride=2,
                                           padding=1))  # 3. (64, 64, 16) -> 5. (32, 32, 32) -> 7. (16, 16, 64)
             self.network.append(nn.LeakyReLU(0.2, inplace=True))
@@ -46,45 +46,38 @@ class AutoEncoder(nn.Module):
                                           padding=1))  # 4. (64, 64, 16) -> 6. (32, 32, 32) -> 8. (16, 16, 64)
             self.network.append(nn.LeakyReLU(0.2, inplace=True))
 
-            # 채널 증폭 및 이미지 크기 계산
             row /= 2
             col /= 2
             channel *= 2
 
-        # 인코더 마지막 레이어 (채널 100, 크기 row - 9, col - 9)
         if int(row) < 10 or int(col) < 10:
-            # 안정성을 위해 커널 사이즈 7로 축소
             kernel_size_enc = 7
         else:
             kernel_size_enc = 10
 
-        self.network.append(nn.Conv2d(channel, 100, kernel_size=kernel_size_enc, stride=1, padding=0))  # 인코딩 레이어
+        self.network.append(nn.Conv2d(channel, 100, kernel_size=kernel_size_enc, stride=1, padding=0))
         self.network.append(nn.LeakyReLU(0.2, inplace=True))
 
-        # 디코더 시작
         self.network.append(nn.ConvTranspose2d(100, channel, kernel_size=kernel_size_enc, stride=1, padding=0))
         self.network.append(nn.LeakyReLU(0.2, inplace=True))
 
-        # 디코더 업샘플링 조건, 주의: 루프 조건 수정 (or 사용)
         while int(row) != int(resize_size[0] / 2) or int(col) != int(resize_size[1] / 2):
             self.network.append(
-                nn.ConvTranspose2d(int(channel), int(channel / 2), kernel_size=4, stride=2, padding=1))  # 업샘플링
+                nn.ConvTranspose2d(int(channel), int(channel / 2), kernel_size=4, stride=2, padding=1))
             self.network.append(nn.LeakyReLU(0.2, inplace=True))
 
             self.network.append(
-                nn.ConvTranspose2d(int(channel / 2), int(channel / 2), kernel_size=3, stride=1, padding=1))  # 채널 유지
+                nn.ConvTranspose2d(int(channel / 2), int(channel / 2), kernel_size=3, stride=1, padding=1))
             self.network.append(nn.LeakyReLU(0.2, inplace=True))
 
             row *= 2
             col *= 2
             channel = int(channel / 2)
 
-        # 추가 ConvTranspose2d (채널 downscale)
         self.network.append(nn.ConvTranspose2d(channel, int(channel / 2), kernel_size=3, stride=1, padding=1))
         self.network.append(nn.LeakyReLU(0.2, inplace=True))
         channel = int(channel / 2)
 
-        # 마지막 출력층 (채널 3)
         self.network.append(nn.ConvTranspose2d(channel, 3, kernel_size=4, stride=2, padding=1))  # (256, 256, 3)
         self.network.append(nn.Sigmoid())
 
