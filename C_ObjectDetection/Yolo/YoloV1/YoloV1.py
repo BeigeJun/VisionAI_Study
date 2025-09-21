@@ -1,6 +1,11 @@
+import os
+import yaml
+import torch
 import torch.nn as nn
 from torchvision import transforms
 from F_Model_Zoo.Models.Util.ModelBase import modelbase
+from C_ObjectDetection.Yolo.YoloV1.DataLoader import YoloV1DataLoader
+from C_ObjectDetection.Util.Draw_Graph import Draw_Graph
 
 class Yolov1(modelbase):
     def __init__(self, split_size, num_boxes, num_classes=20):
@@ -63,3 +68,27 @@ class Yolov1(modelbase):
 
     def return_transform_info(self):
         return self.transform_info
+
+def main():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    yaml_path = os.path.join(current_dir, '..', 'Util', 'config.yaml')
+    yaml_path = os.path.normpath(yaml_path)
+
+    with open(yaml_path, "r") as f:
+        config = yaml.safe_load(f)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = Yolov1(split_size=7, num_boxes=2, num_classes=config['num_class']).to(device)
+
+    graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
+
+    transform_info = model.return_transform_info()
+    train_loader, validation_loader, test_loader = classification_data_loader(config['load_path'],
+                                                                              config['batch_size'], transform_info)
+
+    train_model(device=device, model=model, epochs=config['epoch'], patience=config['patience'],
+                train_loader=train_loader,
+                val_loader=validation_loader, test_loader=test_loader, lr=0.001, graph=graph)
+
+if __name__ == "__main__":
+    main()
