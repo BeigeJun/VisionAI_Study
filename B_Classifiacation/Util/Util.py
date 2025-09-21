@@ -1,10 +1,7 @@
-import os
-import yaml
 import torch
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
-from torchvision import transforms
 from torchvision.datasets import ImageFolder
 
 def classification_data_loader(str_path, batch_size, info):
@@ -21,7 +18,9 @@ def classification_data_loader(str_path, batch_size, info):
     return train_loader, validation_loader, test_loader
 
 
-def train_model(device, model, train_loader, val_loader, test_loader, graph, optimizer_name = 'Adam', criterion_name = 'CrossEntropyLoss', epochs=20, lr=0.001, patience=5, graph_update_epoch = 10):
+def train_model(device, model, train_loader, val_loader, test_loader, graph, optimizer_name = 'Adam',
+                criterion_name = 'CrossEntropyLoss', epochs=20, lr=0.001, patience=5, graph_update_epoch = 10):
+
     if optimizer_name == 'Adam':
         optimizer = optim.Adam(model.parameters(), lr=lr)
     elif optimizer_name == 'AdamW':

@@ -6,6 +6,7 @@ from torchvision import transforms
 from F_Model_Zoo.Models.Util.ModelBase import modelbase
 from C_ObjectDetection.Yolo.YoloV1.DataLoader import YoloV1DataLoader
 from C_ObjectDetection.Util.Draw_Graph import Draw_Graph
+from C_ObjectDetection.Yolo.YoloV1.Trainer import train_model
 
 class Yolov1(modelbase):
     def __init__(self, split_size, num_boxes, num_classes=20):
@@ -83,12 +84,10 @@ def main():
     graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
 
     transform_info = model.return_transform_info()
-    train_loader, validation_loader, test_loader = classification_data_loader(config['load_path'],
+    train_loader, validation_loader, test_loader = YoloV1DataLoader(config['load_path'],
                                                                               config['batch_size'], transform_info)
 
-    train_model(device=device, model=model, epochs=config['epoch'], patience=config['patience'],
-                train_loader=train_loader,
-                val_loader=validation_loader, test_loader=test_loader, lr=0.001, graph=graph)
+    train_model()
 
 if __name__ == "__main__":
     main()
