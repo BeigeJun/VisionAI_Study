@@ -1,8 +1,6 @@
-import os
 from tqdm import tqdm
 import torch.utils.data
 import torch.optim as optim
-from F_Model_Zoo.Models.Util.Draw_Graph import Draw_Graph
 from F_Model_Zoo.Models.ObjectDetection.Util.Utils import calculate_IoU, mAP, get_bboxes, YoloLoss
 
 def train_model(device, model, train_loader, val_loader, test_loader, graph, epochs=20, lr=0.001,
@@ -55,5 +53,3 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
             correct += (predicted == labels).sum().item()
 
         accuracy = 100 * correct / total
-
-    graph.save_test_info(total, correct, accuracy)

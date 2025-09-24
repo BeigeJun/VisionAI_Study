@@ -72,8 +72,10 @@ class Yolov1(modelbase):
 
 def main():
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    yaml_path = os.path.join(current_dir, '..', 'Util', 'config.yaml')
+    yaml_path = os.path.join(current_dir, '..', '..', 'Util', 'config.yaml')
     yaml_path = os.path.normpath(yaml_path)
+
+    util_path = os.path.dirname(yaml_path)
 
     with open(yaml_path, "r") as f:
         config = yaml.safe_load(f)
@@ -84,10 +86,10 @@ def main():
     graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
 
     transform_info = model.return_transform_info()
-    train_loader, validation_loader, test_loader = YoloV1DataLoader(config['load_path'],
-                                                                              config['batch_size'], transform_info)
+    train_loader, validation_loader, test_loader = YoloV1DataLoader(root=util_path+"VOC", transform=transform_info)
 
-    train_model()
+    train_model(device=device, model=model, train_loader=train_loader, val_loader=validation_loader, test_loader=test_loader,
+                graph=graph, epochs=config['epoch'], lr=0.001, patience=config['patience'], graph_update_epoch = 10)
 
 if __name__ == "__main__":
     main()
