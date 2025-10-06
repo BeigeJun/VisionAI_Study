@@ -8,14 +8,14 @@ from torchvision import transforms
 from torchvision.datasets import ImageFolder
 from D_AnomalyDetection.Util.Loss import SSIM
 
-def save_batch_images(images, folder_path, prefix='output', n=4):
+def save_batch_images(images, folder_path, prefix='output', batch_num=0, n=4):
     os.makedirs(folder_path, exist_ok=True)
     to_pil = transforms.ToPILImage()
 
     images = images[:n].cpu().detach()
     for i, img_tensor in enumerate(images):
         pil_img = to_pil(img_tensor)
-        save_path = os.path.join(folder_path, f'{prefix}_{i}.png')
+        save_path = os.path.join(folder_path, f'{batch_num}_{prefix}_{i}.png')
         pil_img.save(save_path)
 
 def anomalydetection_data_loader(str_path, batch_size, info):
@@ -61,6 +61,7 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
         lstValPredictLabel.clear()
 
         for inputs, labels in train_loader:
+            nCount = 0
             inputs, labels = inputs.to(device), labels.to(device)
 
             optimizer.zero_grad()
@@ -69,10 +70,10 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
             loss.backward()
             optimizer.step()
 
-            save_batch_images(outputs, folder_path='D://0. Model_Save_Folder//output_images',
-                              prefix=f'epoch_{epoch}',n=len(inputs))
-
+            save_batch_images(outputs, folder_path='D://0. Model_Save_Folder//output_train_images',
+                              prefix=f'epoch_{epoch}')
             lstTrainLosses.append(loss.item())
+            nCount += 1
 
         train_loss = sum(lstTrainLosses) / len(lstTrainLosses)
         fMaxLoss = max(lstTrainLosses)
@@ -94,7 +95,10 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
                     lstValPredictLabel.append(0)
                 else:
                     lstValPredictLabel.append(1)
-                nCount+=1
+
+                save_batch_images(outputs, folder_path='D://0. Model_Save_Folder//output_validation_images',
+                                  prefix=f'epoch_{epoch}')
+                nCount += 1
 
         val_acc = 100 * lstValPredictLabel.count(0) / len(lstValPredictLabel)
         val_loss = sum(lstValLosses) / len(lstValLosses)
@@ -133,7 +137,7 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
     graph.save_plt()
     graph.save_train_info(patience_count)
 
-    best_model_path = os.path.join(graph.str_save_path, 'Best_Model.pth')
+    best_model_path = os.path.join(graph.save_path, 'Bottom_Loss_Train.pth')
     model.load_state_dict(torch.load(best_model_path))
 
     model.eval()
@@ -156,8 +160,10 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
     total_test = 0
     Predict_results = []
 
+    listPredict = ["TRUE", "FALSE"]
     with torch.no_grad():
         for inputs, labels in test_loader:
+            nCount = 0
             inputs, labels = inputs.to(device), labels.to(device)
             outputs = model(inputs)
 
@@ -167,6 +173,12 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
                 Predict_results.append(pred)
                 correct_test += (pred == labels[i].item())
                 total_test += 1
+
+                save_batch_images(inputs, folder_path='D://0. Model_Save_Folder//output_test_images',
+                                  batch_num=total_test, prefix=f'input_' + listPredict[pred])
+                save_batch_images(outputs, folder_path='D://0. Model_Save_Folder//output_test_images',
+                                  batch_num = total_test, prefix=f'output_' + listPredict[pred])
+            nCount += 1
 
     test_acc = 100 * correct_test / total_test
     print(f'Final Test Accuracy: {test_acc:.2f}%')

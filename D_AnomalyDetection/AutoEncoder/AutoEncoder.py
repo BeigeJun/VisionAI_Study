@@ -4,7 +4,7 @@ from D_AnomalyDetection.Util.Draw_Graph import *
 class AutoEncoder(nn.Module):
     def __init__(self, alpha=1.0, num_class=10):
         super().__init__()
-        self.resize_size = (256, 256)
+        self.resize_size = (1024, 1024)
         self.transform_info = transforms.Compose([
             transforms.Resize(self.resize_size),
             transforms.ToTensor()
