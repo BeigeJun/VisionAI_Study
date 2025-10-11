@@ -1,7 +1,7 @@
 import torch.nn as nn
 from torchvision import transforms
-from F_Model_Zoo.Models.Classification.Convolution_Modules import ResidualBlock
-from F_Model_Zoo.Models.Util.ModelBase import modelbase
+from G_Model_Zoo.Models.Classification.Convolution_Modules import ResidualBlock
+from G_Model_Zoo.Models.Util.ModelBase import modelbase
 
 
 class ResNet(modelbase):

@@ -3,7 +3,7 @@ import yaml
 import torch
 import torch.nn as nn
 from torchvision import transforms
-from F_Model_Zoo.Models.Util.ModelBase import modelbase
+from G_Model_Zoo.Models.Util.ModelBase import modelbase
 from C_ObjectDetection.Yolo.YoloV1.DataLoader import YoloV1DataLoader
 from C_ObjectDetection.Util.Draw_Graph import Draw_Graph
 from C_ObjectDetection.Yolo.YoloV1.Trainer import train_model

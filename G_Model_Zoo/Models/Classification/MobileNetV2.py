@@ -1,7 +1,7 @@
 import torch.nn as nn
 
-from F_Model_Zoo.Models.Classification.Convolution_Modules import InvertedResidualBlock
-from F_Model_Zoo.Models.Util.ModelBase import modelbase
+from G_Model_Zoo.Models.Classification.Convolution_Modules import InvertedResidualBlock
+from G_Model_Zoo.Models.Util.ModelBase import modelbase
 
 
 class MobileNetV2(modelbase):

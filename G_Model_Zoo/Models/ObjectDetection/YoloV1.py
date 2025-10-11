@@ -1,6 +1,6 @@
 import torch.nn as nn
 from torchvision import transforms
-from F_Model_Zoo.Models.Util.ModelBase import modelbase
+from G_Model_Zoo.Models.Util.ModelBase import modelbase
 
 class Yolov1(modelbase):
     def __init__(self, split_size, num_boxes, num_classes=20):

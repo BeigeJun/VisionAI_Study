@@ -1,7 +1,7 @@
 from tqdm import tqdm
 import torch.utils.data
 import torch.optim as optim
-from F_Model_Zoo.Models.ObjectDetection.Util.Utils import calculate_IoU, mAP, get_bboxes, YoloLoss
+from G_Model_Zoo.Models.ObjectDetection.Util.Utils import calculate_IoU, mAP, get_bboxes, YoloLoss
 
 def train_model(device, model, train_loader, val_loader, test_loader, graph, epochs=20, lr=0.001,
                 patience=5, graph_update_epoch = 10):

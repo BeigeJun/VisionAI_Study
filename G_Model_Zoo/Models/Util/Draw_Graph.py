@@ -1,7 +1,7 @@
 import os
 import torch
 import matplotlib.pyplot as plt
-from F_Model_Zoo.Models.ObjectDetection.Util.Utils import mAP, get_bboxes
+from G_Model_Zoo.Models.ObjectDetection.Util.Utils import mAP, get_bboxes
 
 class Draw_Graph():
     def __init__(self, save_path, patience):

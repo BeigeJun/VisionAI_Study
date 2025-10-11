@@ -1,9 +1,9 @@
 import torch.nn as nn
 from torchvision import transforms
-from F_Model_Zoo.Models.Classification.Convolution_Modules import InvertedResidualBlock
-from F_Model_Zoo.Models.Classification.Convolution_Modules import _make_divisible
-from F_Model_Zoo.Models.Classification.Convolution_Modules import h_swish
-from F_Model_Zoo.Models.Util.ModelBase import modelbase
+from G_Model_Zoo.Models.Classification.Convolution_Modules import InvertedResidualBlock
+from G_Model_Zoo.Models.Classification.Convolution_Modules import _make_divisible
+from G_Model_Zoo.Models.Classification.Convolution_Modules import h_swish
+from G_Model_Zoo.Models.Util.ModelBase import modelbase
 
 
 class MobileNetV3(modelbase):
