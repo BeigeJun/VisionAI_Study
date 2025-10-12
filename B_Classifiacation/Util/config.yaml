@@ -1,8 +1,8 @@
-load_path : 'D://Pascal//Classification_DataSet//2_2Class//DataSet'
-save_path : 'D://Model_Save_Folder'
+load_path : 'D:/2-1. Pascal/Classification_DataSet/1_5Class/DataSet'
+save_path : 'D:/Model_Save_Folder'
 
 epoch : 100
 patience : 20
 batch_size : 4
 
-num_class : 2
+num_class : 5
