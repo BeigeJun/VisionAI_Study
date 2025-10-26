@@ -61,7 +61,7 @@ class ResNet152(nn.Module):
         return self.transform_info
 
 
-class DownSample(nn.Module):
+class ProjectionCut(nn.Module):
     def __init__(self, in_put, out_put, stride, expansion=4):
         super().__init__()
         self.conv = nn.Conv2d(in_channels=in_put, out_channels=out_put*expansion, kernel_size=1, stride=stride,
@@ -93,12 +93,12 @@ class ResidualBlock(nn.Module):
             nn.BatchNorm2d(out_put*expansion)
         )
 
-        self.downsample = DownSample(in_put=in_put, out_put=out_put, stride=stride, expansion=expansion)
-        self.use_downsample = False
-        self.relu = nn.ReLU(inplace=True)
-
         if stride != 1 or in_put != out_put * expansion:
-            self.use_downsample = True
+            self.short_cut = ProjectionCut(in_put=in_put, out_put=out_put, stride=stride, expansion=expansion)
+        else:
+            self.short_cut = nn.Sequential()
+
+        self.relu = nn.ReLU()
 
     def forward(self, x):
         in_put = x
@@ -106,9 +106,7 @@ class ResidualBlock(nn.Module):
         out = self.conv3x3(out)
         out = self.conv1x1_2(out)
 
-        if self.use_downsample:
-            in_put = self.downsample(in_put)
-        out += in_put
+        out += self.short_cut(in_put)
         out = self.relu(out)
         return out
 
@@ -123,7 +121,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = ResNet152(num_class=config['num_class']).to(device)
 
-    graph = Draw_Graph(save_path=config['save_path'], n_patience=config['patience'])
+    graph = Draw_Graph(save_path=config['save_path'], patience=config['patience'])
 
     transform_info = model.return_transform_info()
     train_loader, validation_loader, test_loader = classification_data_loader(config['load_path'],
