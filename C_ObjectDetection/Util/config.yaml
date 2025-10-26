@@ -1,8 +1,13 @@
 load_path : 'D://1-2. MvTec_Anomaly//1.Bottel'
 save_path : 'D://0. Model_Save_Folder'
 
-epoch : 100
-patience : 20
-batch_size : 1
+traincsvfile_path : "D:/1. DataSet/2-1. Pascal/VOC2/VOC2012/VOC2012/annotations_Train.csv"
+testcsvfile_path : "D:/1. DataSet/2-1. Pascal/VOC2/VOC2012/VOC2012/annotations_Test.csv"
+IMG_DIR : "D:/1. DataSet/2-1. Pascal/VOC2/VOC2012/VOC2012/JPEGImages"
+LABEL_DIR : "D:/1. DataSet/2-1. Pascal/VOC2/VOC2012/VOC2012/MakedLabels"
 
-num_class : 2
+epoch : 10000
+patience : 1000
+batch_size : 32
+
+num_class : 20

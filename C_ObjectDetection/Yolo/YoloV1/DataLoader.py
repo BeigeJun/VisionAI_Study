@@ -1,3 +1,5 @@
+import os
+from PIL import Image
 import torch
 import pandas as pd
 

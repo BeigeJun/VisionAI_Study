@@ -33,23 +33,27 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
 
         # Calculate train mAP
         model.eval()
-        pred_boxes, target_boxes = get_bboxes(train_loader, model, iou_threshold=0.5, threshold=0.4, device=device)
+        pred_boxes, target_boxes = get_bboxes(val_loader, model, iou_threshold=0.5, threshold=0.4, device=device)
         train_mAP = mAP(pred_boxes, target_boxes, iou_threshold=0.5, box_format="midpoint")
 
         pbar.set_postfix({'Train Loss': f'{train_loss:.4f}', 'Train mAP': f'{train_mAP:.4f}'})
 
+        graph.update_graph(train_acc=train_mAP, train_loss=train_loss, val_acc=train_mAP, val_loss=0.0, epoch=epoch, patience_count=patience_count)
+
         patience_count += 1
 
-    model.eval()
-    with torch.no_grad():
-        total = 0
-        correct = 0
-        for inputs, labels in test_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
+    graph.save_model()
 
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-
-        accuracy = 100 * correct / total
+    # model.eval()
+    # with torch.no_grad():
+    #     total = 0
+    #     correct = 0
+    #     for inputs, labels in test_loader:
+    #         inputs, labels = inputs.to(device), labels.to(device)
+    #         outputs = model(inputs)
+    #
+    #         _, predicted = torch.max(outputs.data, 1)
+    #         total += labels.size(0)
+    #         correct += (predicted == labels).sum().item()
+    #
+    #     accuracy = 100 * correct / total

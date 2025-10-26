@@ -164,8 +164,8 @@ def main():
     save_path = "D:/Model_Save/Test"
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = AlexNet(dim=64, num_class=num_class).to(device)
-    # model = Yolov1(split_size=7, num_boxes=2, num_classes=num_class).to(device)
+    #model = AlexNet(dim=64, num_class=num_class).to(device)
+    model = Yolov1(split_size=7, num_boxes=2, num_classes=num_class).to(device)
 
 
     model_name = model.__class__.__name__
@@ -178,10 +178,10 @@ def main():
         train_loader, validation_loader, test_loader = Classification_data_loader(load_path, batch_size, transform_info)
 
     else:
-        traincsvfile_path = "D:/Image_Data/Pascal/100examples.csv"
-        testcsvfile_path = "D:/Image_Data/Pascal/test.csv"
-        IMG_DIR = "D:/Image_Data/Pascal/images"
-        LABEL_DIR = "D:/Image_Data/Pascal/labels"
+        traincsvfile_path = "D:/2-1. Pascal/VOC2/VOC2012/VOC2012/annotations.csv"
+        testcsvfile_path = "D:/2-1. Pascal/VOC2/VOC2012/VOC2012/annotations.csv"
+        IMG_DIR = "D:/2-1. Pascal/VOC2/VOC2012/VOC2012/JPEGImages"
+        LABEL_DIR = "D:/2-1. Pascal/VOC2/VOC2012/VOC2012/MakedLabels"
         if model_name == 'Yolov1':
             transform = Compose(transform_info)
             train_validation_set = YoloV1DataLoader(traincsvfile_path, transform=transform,

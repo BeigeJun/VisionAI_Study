@@ -3,9 +3,11 @@ import yaml
 import torch
 import torch.nn as nn
 from torchvision import transforms
+from torch.utils.data import random_split
 from G_Model_Zoo.Models.Util.ModelBase import modelbase
-from C_ObjectDetection.Yolo.YoloV1.DataLoader import YoloV1DataLoader
+from C_ObjectDetection.Yolo.YoloV1.DataLoader import YoloV1DataLoader, Compose
 from C_ObjectDetection.Util.Draw_Graph import Draw_Graph
+from C_ObjectDetection.Yolo.YoloV1.Util import test_yolov1_inference
 from C_ObjectDetection.Yolo.YoloV1.Trainer import train_model
 
 class Yolov1(modelbase):
@@ -86,10 +88,26 @@ def main():
     graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
 
     transform_info = model.return_transform_info()
-    train_loader, validation_loader, test_loader = YoloV1DataLoader(transform=transform_info)
 
-    train_model(device=device, model=model, train_loader=train_loader, val_loader=validation_loader, test_loader=test_loader,
-                graph=graph, epochs=config['epoch'], lr=0.001, patience=config['patience'], graph_update_epoch = 10)
+    transform = Compose(transform_info)
+    train_validation_set = YoloV1DataLoader(config['traincsvfile_path'], transform=transform,
+                                            img_dir=config['IMG_DIR'], label_dir=config['LABEL_DIR'])
+    test_set = YoloV1DataLoader(config['testcsvfile_path'], transform=transform,
+                                img_dir=config['IMG_DIR'], label_dir=config['LABEL_DIR'])
+
+    train_set_num = int(0.8 * len(train_validation_set))
+    validation_set_num = len(train_validation_set) - train_set_num
+
+    train_set, validation_set = random_split(train_validation_set, [train_set_num, validation_set_num])
+
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=config['batch_size'], shuffle=True)
+    validation_loader = torch.utils.data.DataLoader(validation_set, batch_size=config['batch_size'], shuffle=False)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=config['batch_size'], shuffle=False)
+
+    # train_model(device=device, model=model, train_loader=train_loader, val_loader=validation_loader, test_loader=test_loader,
+    #             graph=graph, epochs=config['epoch'], lr=0.001, patience=config['patience'], graph_update_epoch = 2)
+    model.load_state_dict(torch.load('D:/0. Model_Save_Folder/Bottom_Loss_Validation.pth', map_location=device))
+    test_yolov1_inference(model=model, loader=test_loader, device=device)
 
 if __name__ == "__main__":
     main()

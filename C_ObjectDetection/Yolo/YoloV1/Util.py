@@ -238,7 +238,7 @@ def mAP(predict_boxes, gt_boxes, iou_threshold, box_format="corners", num_class=
     return sum(average_precisions) / len(average_precisions)
 
 
-def plot_image(image, boxes):
+def plot_image(image, boxes, nIndex):
     im = np.array(image)
     height, width, _ = im.shape
 
@@ -246,7 +246,7 @@ def plot_image(image, boxes):
     ax.imshow(im)
 
     for box in boxes:
-        box = box[2:]
+        box = box[2:6]
         assert len(box) == 4, "Got more values than in x, y, w, h, in a box!"
         upper_left_x = box[0] - box[2] / 2
         upper_left_y = box[1] - box[3] / 2
@@ -259,7 +259,8 @@ def plot_image(image, boxes):
             facecolor="none",
         )
         ax.add_patch(rect)
-    plt.show()
+    #plt.show()
+    plt.savefig(str(nIndex) + "_output.png")
 
 
 def convert_cellboxes(predictions, S=7):
@@ -365,3 +366,25 @@ def get_bboxes(loader, model, iou_threshold, threshold, pred_format="cells", box
 
     model.train()
     return all_pred_boxes, all_true_boxes
+
+
+
+def test_yolov1_inference(model, loader, device):
+    model.eval()
+    iou_threshold = 0.5
+    score_threshold = 0.4
+
+    pred_boxes, true_boxes = get_bboxes(
+        loader, model, iou_threshold=iou_threshold,
+        threshold=score_threshold, device=device
+    )
+
+    map_score = mAP(pred_boxes, true_boxes, iou_threshold=iou_threshold, num_class=20)
+    print(f"Test mAP: {map_score:.4f}")
+    nIndex = 0
+    for images, _ in loader:
+        img = images[nIndex].permute(1,2,0).numpy()
+        boxes = [box for box in pred_boxes if box[0]==0]
+        plot_image(img, boxes, nIndex)
+        nIndex += 1
+        break
