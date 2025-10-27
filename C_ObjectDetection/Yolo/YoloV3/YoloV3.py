@@ -1,7 +1,13 @@
+import os
+import yaml
 import torch
 import torch.nn as nn
-from G_Model_Zoo.Models.Util.ModelBase import modelbase
 from torchvision import transforms
+from torch.utils.data import random_split
+from G_Model_Zoo.Models.Util.ModelBase import modelbase
+from C_ObjectDetection.Yolo.YoloV3.DataLoader import YoloV3DataLoader, train_transforms , test_transforms
+from C_ObjectDetection.Util.Draw_Graph import Draw_Graph
+from C_ObjectDetection.Yolo.YoloV3.Trainer import train_model
 
 
 class BasicCNNBlock(nn.Module):
@@ -69,7 +75,7 @@ class DarkNet53(nn.Module):
             [256, 512, 3, 2, 8],
             [512, 1024, 3, 2, 4]]
 
-        self.layers = []
+        self.layers = nn.ModuleList()
         for i, (Input, Output, Kernel, Stride, Residual_repeat) in enumerate(self.cfg):
             self.layers.append(BasicCNNBlock(Input=Input, Output=Output, kernel_size=Kernel, stride=Stride, padding=1))
             self.layers.append(ResidualBlock(In_Output=Output, Repeat=Residual_repeat)) if Residual_repeat != 0 else None
@@ -109,7 +115,7 @@ class YoloV3(modelbase):
         print("")
 
     def create_layers(self):
-        layers = []
+        layers = nn.ModuleList()
         Input=self.Input
         for Output, Kernel, layer_type in self.cfg:
             layers.append(BasicCNNBlock(Input, Output, kernel_size=Kernel, stride=1, padding=Kernel // 2))
@@ -145,3 +151,47 @@ class YoloV3(modelbase):
 
     def return_transform_info(self):
         return self.transform_info
+
+
+def main():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    yaml_path = os.path.join(current_dir, '..', '..', 'Util', 'config.yaml')
+    yaml_path = os.path.normpath(yaml_path)
+
+    util_path = os.path.dirname(yaml_path)
+
+    with open(yaml_path, "r") as f:
+        config = yaml.safe_load(f)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = YoloV3(num_classes=config['num_class']).to(device)
+
+    graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
+
+    transform_info = model.return_transform_info()
+
+
+    train_validation_set = YoloV3DataLoader(config['traincsvfile_path'], img_dir=config['IMG_DIR'],
+                                            label_dir=config['LABEL_DIR'], image_size=416, C=20,
+                                            transform=train_transforms)
+
+    test_set = YoloV3DataLoader(config['testcsvfile_path'], img_dir=config['IMG_DIR'],
+                                label_dir=config['LABEL_DIR'], image_size=416, C=20,
+                                transform=test_transforms)
+
+    train_set_num = int(0.8 * len(train_validation_set))
+    validation_set_num = len(train_validation_set) - train_set_num
+
+    train_set, validation_set = random_split(train_validation_set, [train_set_num, validation_set_num])
+
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=config['batch_size'], shuffle=True)
+    validation_loader = torch.utils.data.DataLoader(validation_set, batch_size=config['batch_size'], shuffle=False)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=config['batch_size'], shuffle=False)
+
+    train_model(device=device, model=model, train_loader=train_loader, val_loader=validation_loader, test_loader=test_loader,
+                 graph=graph, epochs=config['epoch'], lr=0.001, patience=config['patience'], graph_update_epoch = 2)
+    model.load_state_dict(torch.load('D:/0. Model_Save_Folder/Bottom_Loss_Validation.pth', map_location=device))
+    #test_yolov1_inference(model=model, loader=test_loader, device=device)
+
+if __name__ == "__main__":
+    main()

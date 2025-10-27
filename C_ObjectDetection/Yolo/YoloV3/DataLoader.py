@@ -1,71 +1,118 @@
 import os
+import cv2
 import torch
 import numpy as np
 import pandas as pd
 from PIL import Image
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 from G_Model_Zoo.Models.ObjectDetection.Util.Utils import iou_width_height
 
-class Compose(object):
-    def __init__(self, transforms):
-        self.transforms = transforms
+ANCHORS = [
+    [(0.28, 0.22), (0.38, 0.48), (0.9, 0.78)],
+    [(0.07, 0.15), (0.15, 0.11), (0.14, 0.29)],
+    [(0.02, 0.03), (0.04, 0.07), (0.08, 0.06)],
+]
 
-    def __call__(self, img, bboxes):
-        for transform in self.transforms:
-            img, bboxes = transform(img), bboxes
-        return img, bboxes
+IMAGE_SIZE = 416
+scale = 1.1
 
+train_transforms = A.Compose(
+    [
+        A.LongestMaxSize(max_size=int(IMAGE_SIZE * scale)),
+        A.PadIfNeeded(
+            min_height=int(IMAGE_SIZE * scale),
+            min_width=int(IMAGE_SIZE * scale),
+            border_mode=cv2.BORDER_CONSTANT,
+        ),
+        A.RandomCrop(width=IMAGE_SIZE, height=IMAGE_SIZE),
+        A.ColorJitter(brightness=0.6, contrast=0.6, saturation=0.6, hue=0.6, p=0.4),
+        A.OneOf(
+            [
+                A.ShiftScaleRotate(
+                    rotate_limit=20, p=0.5, border_mode=cv2.BORDER_CONSTANT
+                ),
+                A.Affine(shear=15, p=0.5, mode="constant"),
+            ],
+            p=1.0,
+        ),
+        A.HorizontalFlip(p=0.5),
+        A.Blur(p=0.1),
+        A.CLAHE(p=0.1),
+        A.Posterize(p=0.1),
+        A.ToGray(p=0.1),
+        A.ChannelShuffle(p=0.05),
+        A.Normalize(mean=[0, 0, 0], std=[1, 1, 1], max_pixel_value=255,),
+        ToTensorV2(),
+    ],
+    bbox_params=A.BboxParams(format="yolo", min_visibility=0.4, label_fields=[],),
+)
 
-class YoloV1DataLoader(torch.utils.data.Dataset):
-    def __init__(self, csv_dir, img_dir, label_dir, transform=None, grid_size=7, boxes=2, channel=20):
-        #csv 파일(이미지 경로, 라벨 경로)
-        self.annotations = pd.read_csv(csv_dir)
+test_transforms = A.Compose(
+    [
+        A.LongestMaxSize(max_size=IMAGE_SIZE),
+        A.PadIfNeeded(
+            min_height=IMAGE_SIZE, min_width=IMAGE_SIZE, border_mode=cv2.BORDER_CONSTANT
+        ),
+        A.Normalize(mean=[0, 0, 0], std=[1, 1, 1], max_pixel_value=255,),
+        ToTensorV2(),
+    ],
+    bbox_params=A.BboxParams(format="yolo", min_visibility=0.4, label_fields=[]),
+)
+
+class YoloV3DataLoader(torch.utils.data.Dataset):
+    def __init__(self, csv_file, img_dir,  label_dir, anchors=ANCHORS, image_size=416, S=[13, 26, 52], C=20, transform=None):
+        self.annotations = pd.read_csv(csv_file)
         self.img_dir = img_dir
         self.label_dir = label_dir
+        self.image_size = image_size
         self.transform = transform
-        self.grid_size = grid_size
-        self.boxes = boxes
-        self.channel = channel
+        self.S = S
+        self.anchors = torch.tensor(anchors[0] + anchors[1] + anchors[2])
+        self.num_anchors = self.anchors.shape[0]
+        self.num_anchors_per_scale = self.num_anchors // 3
+        self.C = C
+        self.ignore_iou_thresh = 0.5
 
-    #__는 던더(더블 언더스코어라고 하며 파이썬 내장 함수와 연산자와 연결하여 객체의 기본 동작을 사용자가 정의할수 있게해줌
     def __len__(self):
         return len(self.annotations)
 
-    def __getitem__(self, item):
-        #한 이미지와 그 이미지에 있는 바운딩 박스 가져오기
-        label_path = os.path.join(self.label_dir, self.annotations.iloc[item, 1])
-        boxes = []
-        with open(label_path) as f:
-            for label in f.readlines():
-                class_label, center_x, center_y, width, height = [float(x) if float(x) != int(float(x)) else int(x)
-                                                                 for x in label.replace("\n", "").split()]
-                boxes.append([class_label, center_x, center_y, width, height])
-        img_path = os.path.join(self.img_dir, self.annotations.iloc[item, 0])
-        image = Image.open(img_path)
-        boxes = torch.tensor(boxes)
+    def __getitem__(self, index):
+        label_path = os.path.join(self.label_dir, self.annotations.iloc[index, 1])
+        bboxes = np.roll(np.loadtxt(fname=label_path, delimiter=" ", ndmin=2), 4, axis=1).tolist()
+        img_path = os.path.join(self.img_dir, self.annotations.iloc[index, 0])
+        image = np.array(Image.open(img_path).convert("RGB"))
 
         if self.transform:
-            image, boxes = self.transform(image, boxes)
-        #channel=각 라벨에 대한 확률을 넣기 위해서, 5 = class_label, x_cell, y_cell, width_cell, height_cell, boxes=바운딩박스수
-        label_matrix = torch.zeros((self.grid_size, self.grid_size, self.channel+5*self.boxes))
+            augmentations = self.transform(image=image, bboxes=bboxes)
+            image = augmentations["image"]
+            bboxes = augmentations["bboxes"]
 
-        #박스의 센터, 가로, 세로 정제
-        for box in boxes:
-            class_label, center_x, center_y, width, height = box.tolist()
-            class_label = int(class_label)
+        targets = [torch.zeros((self.num_anchors // 3, S, S, 6)) for S in self.S]
+        for box in bboxes:
+            iou_anchors = iou_width_height(torch.tensor(box[2:4]), self.anchors)
+            anchor_indices = iou_anchors.argsort(descending=True, dim=0)
+            x, y, width, height, class_label = box
+            has_anchor = [False] * 3
+            for anchor_idx in anchor_indices:
+                scale_idx = anchor_idx // self.num_anchors_per_scale
+                anchor_on_scale = anchor_idx % self.num_anchors_per_scale
+                S = self.S[scale_idx]
+                i, j = int(S * y), int(S * x)
+                anchor_taken = targets[scale_idx][anchor_on_scale, i, j, 0]
+                if not anchor_taken and not has_anchor[scale_idx]:
+                    targets[scale_idx][anchor_on_scale, i, j, 0] = 1
+                    x_cell, y_cell = S * x - j, S * y - i
+                    width_cell, height_cell = (width * S, height * S)
+                    box_coordinates = torch.tensor([x_cell, y_cell, width_cell, height_cell])
 
-            #실제 센터가 존재하는 그리드 찾기
-            grid_x, grid_y = int(self.grid_size * center_x), int(self.grid_size * center_y)
-            #실제 존재하는 그리드에서의 위치 찾기
-            x_cell, y_cell = self.grid_size * center_x - grid_x, self.grid_size * center_y - grid_y
-            #바운딩 박스 크기
-            width_cell, height_cell = width * self.grid_size, height * self.grid_size
+                    targets[scale_idx][anchor_on_scale, i, j, 1:5] = box_coordinates
+                    targets[scale_idx][anchor_on_scale, i, j, 5] = int(class_label)
+                    has_anchor[scale_idx] = True
 
-            #욜로1은 다중 감지가 안된다. 단, 한 그리드 안에 여러 물체의 중심이 있을때만이다
-            if label_matrix[grid_y, grid_x, 20] == 0:
-                label_matrix[grid_y, grid_x, 20] = 1
-                box_coordinates = torch.tensor([x_cell, y_cell, width_cell, height_cell])
+                elif not anchor_taken and iou_anchors[anchor_idx] > self.ignore_iou_thresh:
+                    targets[scale_idx][anchor_on_scale, i, j, 0] = -1
 
-                label_matrix[grid_y, grid_x, 21:25] = box_coordinates
-                label_matrix[grid_y, grid_x, class_label] = 1
+        return image, tuple(targets)
 
-        return image, label_matrix
+
