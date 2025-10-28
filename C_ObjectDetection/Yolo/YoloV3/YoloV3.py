@@ -8,6 +8,7 @@ from G_Model_Zoo.Models.Util.ModelBase import modelbase
 from C_ObjectDetection.Yolo.YoloV3.DataLoader import YoloV3DataLoader, train_transforms , test_transforms
 from C_ObjectDetection.Util.Draw_Graph import Draw_Graph
 from C_ObjectDetection.Yolo.YoloV3.Trainer import train_model
+from C_ObjectDetection.Yolo.YoloV3.Util import test_yolov3_inference
 
 
 class BasicCNNBlock(nn.Module):
@@ -188,10 +189,12 @@ def main():
     validation_loader = torch.utils.data.DataLoader(validation_set, batch_size=config['batch_size'], shuffle=False)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=config['batch_size'], shuffle=False)
 
-    train_model(device=device, model=model, train_loader=train_loader, val_loader=validation_loader, test_loader=test_loader,
-                 graph=graph, epochs=config['epoch'], lr=0.001, patience=config['patience'], graph_update_epoch = 2)
-    model.load_state_dict(torch.load('D:/0. Model_Save_Folder/Bottom_Loss_Validation.pth', map_location=device))
-    #test_yolov1_inference(model=model, loader=test_loader, device=device)
+    #train_model(device=device, model=model, train_loader=train_loader, val_loader=validation_loader, test_loader=test_loader,
+    #             graph=graph, epochs=config['epoch'], lr=0.001, patience=config['patience'], graph_update_epoch = 2)
+    model.load_state_dict(torch.load('D:/0. Model_Save_Folder/Best_Accuracy_Train.pth', map_location=device))
+
+    test_yolov3_inference(model=model, loader=test_loader, device=device)
+
 
 if __name__ == "__main__":
     main()

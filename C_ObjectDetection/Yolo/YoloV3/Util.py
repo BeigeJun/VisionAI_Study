@@ -1,100 +1,78 @@
 import torch
+from tqdm import tqdm
 import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-class YoloLoss(nn.Module):
-    def __init__(self, S=7, B=2, C=20):
-        super(YoloLoss, self).__init__()
-        self.mse = nn.MSELoss(reduction="sum")
+class YoloV3Loss(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.mse = nn.MSELoss()
+        self.bce = nn.BCEWithLogitsLoss()
+        self.entropy = nn.CrossEntropyLoss()
+        self.sigmoid = nn.Sigmoid()
 
-        self.S = S
-        self.B = B
-        self.C = C
-        self.lambda_noobj = 0.5
-        self.lambda_coord = 5
+        # Constants signifying how much to pay for each respective part of the loss
+        self.lambda_class = 1
+        self.lambda_noobj = 10
+        self.lambda_obj = 1
+        self.lambda_box = 10
 
-    def forward(self, predictions, target):
-        #구조에 맞게 변형
-        predictions = predictions.reshape(-1, self.S, self.S, self.C + self.B * 5)
-
-        #IoU 생성
-        iou_b1 = calculate_IoU(predictions[..., 21:25], target[..., 21:25])
-        iou_b2 = calculate_IoU(predictions[..., 26:30], target[..., 21:25])
-        ious = torch.cat([iou_b1.unsqueeze(0), iou_b2.unsqueeze(0)], dim=0)
-
-        #더 높은 IoU 채택
-        iou_maxes, bestbox = torch.max(ious, dim=0)
-        exists_box = target[..., 20].unsqueeze(3)
-
-        # ======================== #
-        #   FOR BOX COORDINATES    #
-        # ======================== #
-
-        box_predictions = exists_box * (
-            (
-                bestbox * predictions[..., 26:30]
-                + (1 - bestbox) * predictions[..., 21:25]
-            )
-        )
-
-        box_targets = exists_box * target[..., 21:25]
-
-        box_predictions[..., 2:4] = torch.sign(box_predictions[..., 2:4]) * torch.sqrt(
-            torch.abs(box_predictions[..., 2:4] + 1e-6)
-        )
-        box_targets[..., 2:4] = torch.sqrt(box_targets[..., 2:4])
-
-        box_loss = self.mse(
-            torch.flatten(box_predictions, end_dim=-2),
-            torch.flatten(box_targets, end_dim=-2),
-        )
-
-        # ==================== #
-        #   FOR OBJECT LOSS    #
-        # ==================== #
-        #(1 - bestbox)을 통해 더 높은 상자만 남김
-        pred_box = (
-            bestbox * predictions[..., 25:26] + (1 - bestbox) * predictions[..., 20:21]
-        )
-        #신뢰도 계산
-        object_loss = self.mse(
-            torch.flatten(exists_box * pred_box),
-            torch.flatten(exists_box * target[..., 20:21]),
-        )
+    def forward(self, predictions, target, anchors):
+        # Check where obj and noobj (we ignore if target == -1)
+        obj = target[..., 0] == 1  # in paper this is Iobj_i
+        noobj = target[..., 0] == 0  # in paper this is Inoobj_i
 
         # ======================= #
         #   FOR NO OBJECT LOSS    #
         # ======================= #
 
-        no_object_loss = self.mse(
-            torch.flatten((1 - exists_box) * predictions[..., 20:21], start_dim=1),
-            torch.flatten((1 - exists_box) * target[..., 20:21], start_dim=1),
+        no_object_loss = self.bce(
+            (predictions[..., 0:1][noobj]), (target[..., 0:1][noobj]),
         )
 
-        no_object_loss += self.mse(
-            torch.flatten((1 - exists_box) * predictions[..., 25:26], start_dim=1),
-            torch.flatten((1 - exists_box) * target[..., 20:21], start_dim=1)
-        )
+        # ==================== #
+        #   FOR OBJECT LOSS    #
+        # ==================== #
+
+        anchors = anchors.reshape(1, 3, 1, 1, 2)
+        box_preds = torch.cat([self.sigmoid(predictions[..., 1:3]), torch.exp(predictions[..., 3:5]) * anchors], dim=-1)
+        ious = calculate_IoU(box_preds[obj], target[..., 1:5][obj]).detach()
+        object_loss = self.mse(self.sigmoid(predictions[..., 0:1][obj]), ious * target[..., 0:1][obj])
+
+        # ======================== #
+        #   FOR BOX COORDINATES    #
+        # ======================== #
+
+        predictions[..., 1:3] = self.sigmoid(predictions[..., 1:3])  # x,y coordinates
+        target[..., 3:5] = torch.log(
+            (1e-16 + target[..., 3:5] / anchors)
+        )  # width, height coordinates
+        box_loss = self.mse(predictions[..., 1:5][obj], target[..., 1:5][obj])
 
         # ================== #
         #   FOR CLASS LOSS   #
         # ================== #
 
-        class_loss = self.mse(
-            torch.flatten(exists_box * predictions[..., :20], end_dim=-2,),
-            torch.flatten(exists_box * target[..., :20], end_dim=-2,),
+        class_loss = self.entropy(
+            (predictions[..., 5:][obj]), (target[..., 5][obj].long()),
         )
 
-        loss = (
-            self.lambda_coord * box_loss  # first two rows in paper
-            + object_loss  # third row in paper
-            + self.lambda_noobj * no_object_loss  # forth row
-            + class_loss  # fifth row
+        #print("__________________________________")
+        #print(self.lambda_box * box_loss)
+        #print(self.lambda_obj * object_loss)
+        #print(self.lambda_noobj * no_object_loss)
+        #print(self.lambda_class * class_loss)
+        #print("\n")
+
+        return (
+            self.lambda_box * box_loss
+            + self.lambda_obj * object_loss
+            + self.lambda_noobj * no_object_loss
+            + self.lambda_class * class_loss
         )
 
-        return loss
 
 
 def calculate_IoU(boxes_predict, boxes_labels, box_format="midpoint"):
@@ -325,36 +303,53 @@ def cellboxes_to_boxes(out, S=7):
     return all_bboxes
 
 
-def get_bboxes(loader, model, iou_threshold, threshold, pred_format="cells", box_format="midpoint", device="cuda",):
-    all_pred_boxes = []
-    all_true_boxes = []
-
+def get_bboxes(loader,
+    model,
+    iou_threshold,
+    anchors,
+    threshold,
+    box_format="midpoint",
+    device="cuda",
+):
+    # make sure model is in eval before get bboxes
     model.eval()
     train_idx = 0
-
-    for batch_idx, (x, labels) in enumerate(loader):
+    all_pred_boxes = []
+    all_true_boxes = []
+    for batch_idx, (x, labels) in enumerate(tqdm(loader)):
         x = x.to(device)
-        labels = labels.to(device)
 
         with torch.no_grad():
             predictions = model(x)
 
         batch_size = x.shape[0]
-        #실제, 예측 바운딩 박스를 리스트 형식으로 반환
-        true_bboxes = cellboxes_to_boxes(labels)
-        bboxes = cellboxes_to_boxes(predictions)
+        bboxes = [[] for _ in range(batch_size)]
+        for i in range(3):
+            S = predictions[i].shape[2]
+            anchor = torch.tensor([*anchors[i]]).to(device) * S
+            boxes_scale_i = cells_to_bboxes(
+                predictions[i], anchor, S=S, is_preds=True
+            )
+            for idx, (box) in enumerate(boxes_scale_i):
+                bboxes[idx] += box
 
-        #이미지 마다 처리
+        # we just want one bbox for each label, not one for each scale
+        true_bboxes = cells_to_bboxes(
+            labels[2], anchor, S=S, is_preds=False
+        )
+
         for idx in range(batch_size):
-            #중복 박스 삭제
-            nms_boxes = nms(bboxes[idx], iou_threshold=iou_threshold, threshold=threshold, box_format=box_format,)
+            nms_boxes = nms(
+                bboxes[idx],
+                iou_threshold=iou_threshold,
+                threshold=threshold,
+                box_format=box_format,
+            )
 
             for nms_box in nms_boxes:
-                #이미지 라벨 추가(식별자?)
                 all_pred_boxes.append([train_idx] + nms_box)
 
             for box in true_bboxes[idx]:
-                #제거 가능
                 if box[1] > threshold:
                     all_true_boxes.append([train_idx] + box)
 
@@ -362,6 +357,46 @@ def get_bboxes(loader, model, iou_threshold, threshold, pred_format="cells", box
 
     model.train()
     return all_pred_boxes, all_true_boxes
+
+def cells_to_bboxes(predictions, anchors, S, is_preds=True):
+    """
+    Scales the predictions coming from the model to
+    be relative to the entire image such that they for example later
+    can be plotted or.
+    INPUT:
+    predictions: tensor of size (N, 3, S, S, num_classes+5)
+    anchors: the anchors used for the predictions
+    S: the number of cells the image is divided in on the width (and height)
+    is_preds: whether the input is predictions or the true bounding boxes
+    OUTPUT:
+    converted_bboxes: the converted boxes of sizes (N, num_anchors, S, S, 1+5) with class index,
+                      object score, bounding box coordinates
+    """
+    BATCH_SIZE = predictions.shape[0]
+    num_anchors = len(anchors)
+    box_predictions = predictions[..., 1:5]
+    if is_preds:
+        anchors = anchors.reshape(1, len(anchors), 1, 1, 2)
+        box_predictions[..., 0:2] = torch.sigmoid(box_predictions[..., 0:2])
+        box_predictions[..., 2:] = torch.exp(box_predictions[..., 2:]) * anchors
+        scores = torch.sigmoid(predictions[..., 0:1])
+        best_class = torch.argmax(predictions[..., 5:], dim=-1).unsqueeze(-1)
+    else:
+        scores = predictions[..., 0:1]
+        best_class = predictions[..., 5:6]
+
+    cell_indices = (
+        torch.arange(S)
+        .repeat(predictions.shape[0], 3, S, 1)
+        .unsqueeze(-1)
+        .to(predictions.device)
+    )
+    x = 1 / S * (box_predictions[..., 0:1] + cell_indices)
+    y = 1 / S * (box_predictions[..., 1:2] + cell_indices.permute(0, 1, 3, 2, 4))
+    w_h = 1 / S * box_predictions[..., 2:4]
+    converted_bboxes = torch.cat((best_class, scores, x, y, w_h), dim=-1).reshape(BATCH_SIZE, num_anchors * S * S, 6)
+    return converted_bboxes.tolist()
+
 
 
 def iou_width_height(boxes1, boxes2):

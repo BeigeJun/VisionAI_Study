@@ -8,6 +8,6 @@ LABEL_DIR : "D:/1. DataSet/2-1. Pascal/VOC2/VOC2012/VOC2012/MakedLabels"
 
 epoch : 10000
 patience : 1000
-batch_size : 32
+batch_size : 16
 
 num_class : 20
