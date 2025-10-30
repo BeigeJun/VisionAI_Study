@@ -3,8 +3,8 @@ import torch.utils.data
 import torch.optim as optim
 from C_ObjectDetection.Yolo.YoloV3.Util import YoloV3Loss, calculate_IoU, mAP, get_bboxes
 
-def train_model(device, model, train_loader, val_loader, test_loader, graph, epochs=20, lr=0.001,
-                patience=5, graph_update_epoch = 10):
+def train_model(device, model, train_loader, val_loader, test_loader, graph, IMAGE_SIZE, ANCHORS,
+                epochs=20, lr=0.001, patience=5, graph_update_epoch = 10):
 
     optimizer = optim.Adam(model.parameters(), lr=lr)
     loss_fn = YoloV3Loss()
@@ -15,12 +15,6 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
     pbar = tqdm(range(epochs), desc="Epoch Progress")
     losses = []
 
-    IMAGE_SIZE = 416
-    ANCHORS = [
-        [(0.28, 0.22), (0.38, 0.48), (0.9, 0.78)],
-        [(0.07, 0.15), (0.15, 0.11), (0.14, 0.29)],
-        [(0.02, 0.03), (0.04, 0.07), (0.08, 0.06)],
-    ]
     scaler = torch.cuda.amp.GradScaler()
 
     scaled_anchors = (

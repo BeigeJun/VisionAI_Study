@@ -5,10 +5,10 @@ import torch.nn as nn
 from torchvision import transforms
 from torch.utils.data import random_split
 from G_Model_Zoo.Models.Util.ModelBase import modelbase
-from C_ObjectDetection.Yolo.YoloV3.DataLoader import YoloV3DataLoader, train_transforms , test_transforms
+from C_ObjectDetection.Yolo.YoloV3.DataLoader import YoloV3DataLoader
 from C_ObjectDetection.Util.Draw_Graph import Draw_Graph
 from C_ObjectDetection.Yolo.YoloV3.Trainer import train_model
-from C_ObjectDetection.Yolo.YoloV3.Util import test_yolov3_inference
+#from C_ObjectDetection.Yolo.YoloV3.Util import test_yolov3_inference
 
 
 class BasicCNNBlock(nn.Module):
@@ -159,26 +159,29 @@ def main():
     yaml_path = os.path.join(current_dir, '..', '..', 'Util', 'config.yaml')
     yaml_path = os.path.normpath(yaml_path)
 
-    util_path = os.path.dirname(yaml_path)
-
     with open(yaml_path, "r") as f:
         config = yaml.safe_load(f)
+
+    ANCHORS = [
+        [(0.28, 0.22), (0.38, 0.48), (0.9, 0.78)],
+        [(0.07, 0.15), (0.15, 0.11), (0.14, 0.29)],
+        [(0.02, 0.03), (0.04, 0.07), (0.08, 0.06)],
+    ]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = YoloV3(num_classes=config['num_class']).to(device)
 
     graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
 
-    transform_info = model.return_transform_info()
-
-
     train_validation_set = YoloV3DataLoader(config['traincsvfile_path'], img_dir=config['IMG_DIR'],
-                                            label_dir=config['LABEL_DIR'], image_size=416, C=20,
-                                            transform=train_transforms)
+                                            label_dir=config['LABEL_DIR'], anchors=ANCHORS,
+                                            image_size=config['IMAGE_SIZE'],S=[13, 26, 52], C=20,
+                                            scale = config["scale"], transform='train')
 
-    test_set = YoloV3DataLoader(config['testcsvfile_path'], img_dir=config['IMG_DIR'],
-                                label_dir=config['LABEL_DIR'], image_size=416, C=20,
-                                transform=test_transforms)
+    test_set = YoloV3DataLoader(config['traincsvfile_path'], img_dir=config['IMG_DIR'],
+                                label_dir=config['LABEL_DIR'], anchors=ANCHORS,
+                                image_size=config['IMAGE_SIZE'],S=[13, 26, 52], C=20,
+                                scale = config["scale"], transform='test')
 
     train_set_num = int(0.8 * len(train_validation_set))
     validation_set_num = len(train_validation_set) - train_set_num
@@ -189,11 +192,13 @@ def main():
     validation_loader = torch.utils.data.DataLoader(validation_set, batch_size=config['batch_size'], shuffle=False)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=config['batch_size'], shuffle=False)
 
-    #train_model(device=device, model=model, train_loader=train_loader, val_loader=validation_loader, test_loader=test_loader,
-    #             graph=graph, epochs=config['epoch'], lr=0.001, patience=config['patience'], graph_update_epoch = 2)
+    train_model(device=device, model=model, train_loader=train_loader, val_loader=validation_loader, test_loader=test_loader,
+                ANCHORS=ANCHORS, IMAGE_SIZE=config["IMAGE_SIZE"], graph=graph, epochs=config['epoch'],
+                lr=0.001, patience=config['patience'], graph_update_epoch = 2)
+
     model.load_state_dict(torch.load('D:/0. Model_Save_Folder/Best_Accuracy_Train.pth', map_location=device))
 
-    test_yolov3_inference(model=model, loader=test_loader, device=device)
+    #test_yolov3_inference(model=model, loader=test_loader, device=device)
 
 
 if __name__ == "__main__":
