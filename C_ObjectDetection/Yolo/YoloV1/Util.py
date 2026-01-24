@@ -81,10 +81,6 @@ class YoloLoss(nn.Module):
             torch.flatten((1 - exists_box) * target[..., 20:21], start_dim=1)
         )
 
-        # ================== #
-        #   FOR CLASS LOSS   #
-        # ================== #
-
         class_loss = self.mse(
             torch.flatten(exists_box * predictions[..., :20], end_dim=-2,),
             torch.flatten(exists_box * target[..., :20], end_dim=-2,),
