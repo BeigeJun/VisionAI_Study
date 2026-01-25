@@ -104,8 +104,8 @@ def main():
     validation_loader = torch.utils.data.DataLoader(validation_set, batch_size=config['batch_size'], shuffle=False)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=config['batch_size'], shuffle=False)
 
-    # train_model(device=device, model=model, train_loader=train_loader, val_loader=validation_loader, test_loader=test_loader,
-    #             graph=graph, epochs=config['epoch'], lr=0.001, patience=config['patience'], graph_update_epoch = 2)
+    train_model(device=device, model=model, train_loader=train_loader, val_loader=validation_loader, test_loader=test_loader,
+                 graph=graph, epochs=config['epoch'], lr=0.001, patience=config['patience'], graph_update_epoch = 2)
     model.load_state_dict(torch.load('D:/0. Model_Save_Folder/Bottom_Loss_Validation.pth', map_location=device))
     test_yolov1_inference(model=model, loader=test_loader, device=device)
 

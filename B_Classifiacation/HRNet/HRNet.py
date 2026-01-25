@@ -1,105 +1,59 @@
-import torch
-import torch.nn as nn
 import torch.nn.functional as F
+from B_Classifiacation.Util.Util import *
+from B_Classifiacation.Util.Draw_Graph import *
 
-config = {
-    'GPUS': (0, 1, 2, 3),
-    'LOG_DIR': 'log/',
-    'DATA_DIR': '',
-    'OUTPUT_DIR': 'output/',
-    'WORKERS': 4,
-    'PRINT_FREQ': 1000,
-
+config_small = {
     'MODEL': {
-        'NAME': 'cls_hrnet',
-        'IMAGE_SIZE': [224, 224],
         'EXTRA': {
-            'WITH_HEAD': True,
             'STAGE1': {
                 'NUM_MODULES': 1,
                 'NUM_BRANCHES': 1,
                 'BLOCK': 'BOTTLENECK',
-                'NUM_BLOCKS': [1],
-                'NUM_CHANNELS': [32],
+                'NUM_BLOCKS': [4],
+                'NUM_CHANNELS': [64],
                 'FUSE_METHOD': 'SUM'
             },
             'STAGE2': {
                 'NUM_MODULES': 1,
                 'NUM_BRANCHES': 2,
                 'BLOCK': 'BASIC',
-                'NUM_BLOCKS': [2, 2],
-                'NUM_CHANNELS': [16, 32],
+                'NUM_BLOCKS': [4, 4],
+                'NUM_CHANNELS': [64, 128],
                 'FUSE_METHOD': 'SUM'
             },
             'STAGE3': {
-                'NUM_MODULES': 1,
+                'NUM_MODULES': 4,
                 'NUM_BRANCHES': 3,
                 'BLOCK': 'BASIC',
-                'NUM_BLOCKS': [2, 2, 2],
-                'NUM_CHANNELS': [16, 32, 64],
+                'NUM_BLOCKS': [4, 4, 4],
+                'NUM_CHANNELS': [64, 128, 256],
                 'FUSE_METHOD': 'SUM'
             },
             'STAGE4': {
-                'NUM_MODULES': 1,
+                'NUM_MODULES': 3,
                 'NUM_BRANCHES': 4,
                 'BLOCK': 'BASIC',
-                'NUM_BLOCKS': [2, 2, 2, 2],
-                'NUM_CHANNELS': [16, 32, 64, 128],
+                'NUM_BLOCKS': [4, 4, 4, 4],
+                'NUM_CHANNELS': [64, 128, 256, 512],
                 'FUSE_METHOD': 'SUM'
             }
         }
-    },
-
-    'CUDNN': {
-        'BENCHMARK': True,
-        'DETERMINISTIC': False,
-        'ENABLED': True
-    },
-
-    'DATASET': {
-        'DATASET': 'imagenet',
-        'DATA_FORMAT': 'jpg',
-        'ROOT': 'data/imagenet/',
-        'TEST_SET': 'val',
-        'TRAIN_SET': 'train'
-    },
-
-    'TEST': {
-        'BATCH_SIZE_PER_GPU': 32,
-        'MODEL_FILE': ''
-    },
-
-    'TRAIN': {
-        'BATCH_SIZE_PER_GPU': 32,
-        'BEGIN_EPOCH': 0,
-        'END_EPOCH': 100,
-        'RESUME': True,
-        'LR_FACTOR': 0.1,
-        'LR_STEP': [30, 60, 90],
-        'OPTIMIZER': 'sgd',
-        'LR': 0.05,
-        'WD': 0.0001,
-        'MOMENTUM': 0.9,
-        'NESTEROV': True,
-        'SHUFFLE': True
-    },
-
-    'DEBUG': {
-        'DEBUG': False
     }
 }
 
+
 class BasicBlock(nn.Module):
+    expansion = 1
+
     def __init__(self, input, output, stride=1, downsampling=None):
         super(BasicBlock, self).__init__()
-        self.expansion = 1
 
         self.conv3x3_1 = nn.Conv2d(input, output, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
+                                   padding=1, bias=False)
         self.bn_1 = nn.BatchNorm2d(output, momentum=0.1)
 
-        self.conv3x3_2 = nn.Conv2d(output, output, kernel_size=3, stride=stride,
-                     padding=1, bias=False)
+        self.conv3x3_2 = nn.Conv2d(output, output, kernel_size=3, stride=1,
+                                   padding=1, bias=False)
         self.bn_2 = nn.BatchNorm2d(output, momentum=0.1)
 
         self.relu = nn.ReLU(inplace=True)
@@ -122,10 +76,13 @@ class BasicBlock(nn.Module):
         output = self.relu(output)
         return output
 
+
 class Bottleneck(nn.Module):
+    expansion = 4
+
     def __init__(self, input, output, stride=1, downsampling=None):
         super(Bottleneck, self).__init__()
-        self.expansion = 4
+
         self.conv1x1_1 = nn.Conv2d(input, output, kernel_size=1, bias=False)
         self.bn1 = nn.BatchNorm2d(output, momentum=0.1)
 
@@ -160,11 +117,10 @@ class Bottleneck(nn.Module):
         return output
 
 
-
-
 class HRModule(nn.Module):
-    def __int__(self, num_branches, blocks, num_blocks, num_in_channels, num_channels, fuse_method, multi_scale_output=True):
-        super(HRModule, self).__int__()
+    def __init__(self, num_branches, blocks, num_blocks, num_in_channels, num_channels, fuse_method,
+                 multi_scale_output=True):
+        super(HRModule, self).__init__()
 
         self.num_in_channels = num_in_channels
         self.fuse_method = fuse_method
@@ -175,63 +131,327 @@ class HRModule(nn.Module):
         self.branches = self._make_branches(
             num_branches, blocks, num_blocks, num_channels)
         self.fuse_layers = self._make_fuse_layers()
-        self.relu = nn.ReLU(False)
+        self.relu = nn.ReLU(inplace=True)
 
-    # 'STAGE1': {
-    #     'NUM_MODULES': 1,
-    #     'NUM_BRANCHES': 1,
-    #     'BLOCK': 'BOTTLENECK',
-    #     'NUM_BLOCKS': [1],
-    #     'NUM_CHANNELS': [32],
-    #     'FUSE_METHOD': 'SUM'
-    # },
-
-    def _make_one_brach(self, branch_index, block, num_blocks, num_channels, stride=1):
+    def _make_one_branch(self, branch_index, block, num_blocks, num_channels,
+                         stride=1):
         downsampling = None
-        if stride != 1 or self.num_in_channels[branch_index] != num_channels[branch_index * block.expansion]:
+        if stride != 1 or self.num_in_channels[branch_index] != num_channels[branch_index] * block.expansion:
             downsampling = nn.Sequential(
                 nn.Conv2d(self.num_in_channels[branch_index],
                           num_channels[branch_index] * block.expansion,
                           kernel_size=1, stride=stride, bias=False),
                 nn.BatchNorm2d(num_channels[branch_index] * block.expansion,
-                            momentum=0.1),
+                               momentum=0.1),
             )
 
         layers = []
         layers.append(block(self.num_in_channels[branch_index], num_channels[branch_index], stride, downsampling))
-        self.num_in_channels[branch_index] = num_channels * block.expansion
+        self.num_in_channels[branch_index] = num_channels[branch_index] * block.expansion
 
         for i in range(1, num_blocks[branch_index]):
             layers.append(block(self.num_in_channels[branch_index], num_channels[branch_index]))
 
-        return  nn.Sequential(*layers)
+        return nn.Sequential(*layers)
 
     def _make_branches(self, num_branch, block, num_blocks, num_channels):
         branches = []
 
         for i in range(num_branch):
-            branches.append(self._make_one_brach(i, block, num_blocks, num_channels))
+            branches.append(
+                self._make_one_branch(i, block, num_blocks, num_channels))
 
         return nn.ModuleList(branches) #이걸 쓰는이유는 Sequential은 append로만 이루어진 간단한 구조인데 이 branch는 아니기 때문 즉 어려운 구조일때 이걸 쓴다?
 
-
     def _make_fuse_layers(self):
         if self.num_branches == 1: #단일 브랜치는 Fusion 불필요
-            return 0
+            return None
 
         num_branches = self.num_branches
         num_in_channels = self.num_in_channels
         fuse_layers = []
-        for i in range(num_branches if self.multi_scale_output else 1):
+        for i in range(num_branches if self.multi_scale_output else 1): # i = Resolution
             fuse_layer = []
+            for j in range(num_branches): # j = Branch Index
+                if j > i: # 낮은 해상도 -> 높은 해상도
+                    fuse_layer.append(nn.Sequential(
+                        nn.Conv2d(num_in_channels[j], num_in_channels[i], 1, 1, 0, bias=False),
+                        nn.BatchNorm2d(num_in_channels[i], momentum=0.1),
+                        nn.Upsample(scale_factor=2 ** (j - i), mode='nearest')))
+                elif j == i: # 같은 해상도
+                    fuse_layer.append(None)
+                else: #높은 해상도 -> 낮은 해상도
+                    conv3x3s = []
+                    for k in range(i - j): #k = Down Sampling
+                        if k == i - j - 1:
+                            num_outchannels_conv3x3 = num_in_channels[i]
+                            conv3x3s.append(nn.Sequential(
+                                nn.Conv2d(num_in_channels[j], num_outchannels_conv3x3, 3, 2, 1, bias=False),
+                                nn.BatchNorm2d(num_outchannels_conv3x3, momentum=0.1)))
+
+                        else:
+                            num_outchannels_conv3x3 = num_in_channels[j]
+                            conv3x3s.append(nn.Sequential(
+                                nn.Conv2d(num_in_channels[j], num_outchannels_conv3x3, 3, 2, 1, bias=False),
+                                nn.BatchNorm2d(num_outchannels_conv3x3, momentum=0.1),
+                                nn.ReLU(inplace=True)))
+                    fuse_layer.append(nn.Sequential(*conv3x3s))
+            fuse_layers.append(nn.ModuleList(fuse_layer))
+        return nn.ModuleList(fuse_layers)
+
+    def get_num_inchannels(self):
+        return self.num_in_channels
+
+    def forward(self, x):
+        if self.num_branches == 1:
+            return [self.branches[0](x[0])]
+
+        for i in range(self.num_branches):
+            x[i] = self.branches[i](x[i])
+
+        x_fuse = []
+        for i in range(len(self.fuse_layers)):
+            y = x[0] if i == 0 else self.fuse_layers[i][0](x[0])
+            for j in range(1, self.num_branches):
+                if i == j:
+                    y = y + x[j]
+                else:
+                    y = y + self.fuse_layers[i][j](x[j])
+            x_fuse.append(self.relu(y))
+        return x_fuse
 
 
+blocks_dict = {
+    'BASIC': BasicBlock,
+    'BOTTLENECK': Bottleneck
+}
+
+BN_MOMENTUM = 0.1
 
 
+class HighResolutionNet(nn.Module):
+    def __init__(self, cfg, **kwargs):
+        super(HighResolutionNet, self).__init__()
+
+        self.transform_info = transforms.Compose([
+            transforms.Resize((1024, 1024)),
+            transforms.ToTensor(),
+        ])
+
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=2, padding=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(64, momentum=BN_MOMENTUM)
+        self.conv2 = nn.Conv2d(64, 64, kernel_size=3, stride=2, padding=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(64, momentum=BN_MOMENTUM)
+        self.relu = nn.ReLU(inplace=True)
+
+        self.stage1_cfg = cfg['MODEL']['EXTRA']['STAGE1']
+        num_channels = self.stage1_cfg['NUM_CHANNELS'][0]
+        block = blocks_dict[self.stage1_cfg['BLOCK']]
+        num_blocks = self.stage1_cfg['NUM_BLOCKS'][0]
+        self.layer1 = self._make_layer(block, 64, num_channels, num_blocks)
+        stage1_out_channel = block.expansion * num_channels
+
+        self.stage2_cfg = cfg['MODEL']['EXTRA']['STAGE2']
+        num_channels = self.stage2_cfg['NUM_CHANNELS']
+        block = blocks_dict[self.stage2_cfg['BLOCK']]
+        num_channels = [num_channels[i] * block.expansion for i in range(len(num_channels))]
+        self.transition1 = self._make_transition_layer([stage1_out_channel], num_channels)
+        self.stage2, pre_stage_channels = self._make_stage(self.stage2_cfg, num_channels)
+
+        self.stage3_cfg = cfg['MODEL']['EXTRA']['STAGE3']
+        num_channels = self.stage3_cfg['NUM_CHANNELS']
+        block = blocks_dict[self.stage3_cfg['BLOCK']]
+        num_channels = [num_channels[i] * block.expansion for i in range(len(num_channels))]
+        self.transition2 = self._make_transition_layer(pre_stage_channels, num_channels)
+        self.stage3, pre_stage_channels = self._make_stage(self.stage3_cfg, num_channels)
+
+        self.stage4_cfg = cfg['MODEL']['EXTRA']['STAGE4']
+        num_channels = self.stage4_cfg['NUM_CHANNELS']
+        block = blocks_dict[self.stage4_cfg['BLOCK']]
+        num_channels = [num_channels[i] * block.expansion for i in range(len(num_channels))]
+        self.transition3 = self._make_transition_layer(pre_stage_channels, num_channels)
+        self.stage4, pre_stage_channels = self._make_stage(self.stage4_cfg, num_channels, multi_scale_output=True)
+
+        self.incre_modules, self.downsamp_modules, self.final_layer = self._make_head(pre_stage_channels)
+        self.classifier = nn.Linear(2048, 1000)
+
+    def return_transform_info(self):
+        return self.transform_info
+
+    def _make_head(self, pre_stage_channels):
+        head_block = Bottleneck
+        head_channels = [32, 64, 128, 256]
+
+        incre_modules = []
+        for i, channels in enumerate(pre_stage_channels):
+            incre_module = self._make_layer(head_block, channels, head_channels[i], 1, stride=1)
+            incre_modules.append(incre_module)
+        incre_modules = nn.ModuleList(incre_modules)
+
+        downsamp_modules = []
+        for i in range(len(pre_stage_channels) - 1):
+            in_channels = head_channels[i] * head_block.expansion
+            out_channels = head_channels[i + 1] * head_block.expansion
+            downsamp_module = nn.Sequential(
+                nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
+                          kernel_size=3, stride=2, padding=1),
+                nn.BatchNorm2d(out_channels, momentum=BN_MOMENTUM),
+                nn.ReLU(inplace=True)
+            )
+            downsamp_modules.append(downsamp_module)
+        downsamp_modules = nn.ModuleList(downsamp_modules)
+
+        final_layer = nn.Sequential(
+            nn.Conv2d(in_channels=head_channels[3] * head_block.expansion,
+                      out_channels=2048, kernel_size=1, stride=1, padding=0),
+            nn.BatchNorm2d(2048, momentum=BN_MOMENTUM),
+            nn.ReLU(inplace=True)
+        )
+
+        return incre_modules, downsamp_modules, final_layer
+
+    def _make_transition_layer(self, num_channels_pre_layer, num_channels_cur_layer):
+        num_branches_cur = len(num_channels_cur_layer)
+        num_branches_pre = len(num_channels_pre_layer)
+
+        transition_layers = []
+        for i in range(num_branches_cur):
+            if i < num_branches_pre:
+                if num_channels_cur_layer[i] != num_channels_pre_layer[i]:
+                    transition_layers.append(nn.Sequential(
+                        nn.Conv2d(num_channels_pre_layer[i], num_channels_cur_layer[i],
+                                  3, 1, 1, bias=False),
+                        nn.BatchNorm2d(num_channels_cur_layer[i], momentum=BN_MOMENTUM),
+                        nn.ReLU(inplace=True)))
+                else:
+                    transition_layers.append(None)
+            else:
+                conv3x3s = []
+                for j in range(i + 1 - num_branches_pre):
+                    inchannels = num_channels_pre_layer[-1]
+                    outchannels = num_channels_cur_layer[i] if j == i - num_branches_pre else inchannels
+                    conv3x3s.append(nn.Sequential(
+                        nn.Conv2d(inchannels, outchannels, 3, 2, 1, bias=False),
+                        nn.BatchNorm2d(outchannels, momentum=BN_MOMENTUM),
+                        nn.ReLU(inplace=True)))
+                transition_layers.append(nn.Sequential(*conv3x3s))
+
+        return nn.ModuleList(transition_layers)
+
+    def _make_layer(self, block, inplanes, planes, blocks, stride=1):
+        downsample = None
+        if stride != 1 or inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(inplanes, planes * block.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(planes * block.expansion, momentum=BN_MOMENTUM),
+            )
+
+        layers = []
+        layers.append(block(inplanes, planes, stride, downsample))
+        inplanes = planes * block.expansion
+        for i in range(1, blocks):
+            layers.append(block(inplanes, planes))
+
+        return nn.Sequential(*layers)
+
+    def _make_stage(self, layer_config, num_inchannels, multi_scale_output=True):
+        num_modules = layer_config['NUM_MODULES']
+        num_branches = layer_config['NUM_BRANCHES']
+        num_blocks = layer_config['NUM_BLOCKS']
+        num_channels = layer_config['NUM_CHANNELS']
+        block = blocks_dict[layer_config['BLOCK']]
+        fuse_method = layer_config['FUSE_METHOD']
+
+        modules = []
+        for i in range(num_modules):
+            if not multi_scale_output and i == num_modules - 1:
+                reset_multi_scale_output = False
+            else:
+                reset_multi_scale_output = True
+
+            modules.append(
+                HRModule(num_branches, block, num_blocks, num_inchannels,
+                         num_channels, fuse_method, reset_multi_scale_output)
+            )
+            num_inchannels = modules[-1].get_num_inchannels()
+
+        return nn.Sequential(*modules), num_inchannels
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.relu(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.relu(x)
+        x = self.layer1(x)
+
+        x_list = []
+        for i in range(self.stage2_cfg['NUM_BRANCHES']):
+            if self.transition1[i] is not None:
+                x_list.append(self.transition1[i](x))
+            else:
+                x_list.append(x)
+        y_list = self.stage2(x_list)
+
+        x_list = []
+        for i in range(self.stage3_cfg['NUM_BRANCHES']):
+            if self.transition2[i] is not None:
+                x_list.append(self.transition2[i](y_list[-1]))
+            else:
+                x_list.append(y_list[i])
+        y_list = self.stage3(x_list)
+
+        x_list = []
+        for i in range(self.stage4_cfg['NUM_BRANCHES']):
+            if self.transition3[i] is not None:
+                x_list.append(self.transition3[i](y_list[-1]))
+            else:
+                x_list.append(y_list[i])
+        y_list = self.stage4(x_list)
+
+        y = self.incre_modules[0](y_list[0])
+        for i in range(len(self.downsamp_modules)):
+            y = self.incre_modules[i + 1](y_list[i + 1]) + self.downsamp_modules[i](y)
+
+        y = self.final_layer(y)
+
+        if torch._C._get_tracing_state():
+            y = y.flatten(start_dim=2).mean(dim=2)
+        else:
+            y = F.avg_pool2d(y, kernel_size=y.size()[2:]).view(y.size(0), -1)
+
+        y = self.classifier(y)
+
+        return y
 
 
+def main():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    yaml_path = os.path.join(current_dir, '..', 'Util', 'config.yaml')
+    yaml_path = os.path.normpath(yaml_path)
+
+    with open(yaml_path, "r") as f:
+        config = yaml.safe_load(f)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = HighResolutionNet(config_small).to(device)
+    # state = torch.load("D:/Model_Save_Folder/Best_Accuracy_Validation.pth")
+    # model.load_state_dict(state)
+    graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
+
+    transform_info =(
+        transforms.Compose([
+        transforms.Resize((1024, 1024)),
+        transforms.ToTensor(),]))
+    train_loader, validation_loader, test_loader = classification_data_loader(config['load_path'],
+                                                                              config['batch_size'], transform_info)
+
+    train_model(device=device, model=model, epochs=config['epoch'], patience=config['patience'],
+                train_loader=train_loader,
+                val_loader=validation_loader, test_loader=test_loader, lr=0.001, graph=graph)
 
 
-
-
-
+if __name__ == "__main__":
+    main()
