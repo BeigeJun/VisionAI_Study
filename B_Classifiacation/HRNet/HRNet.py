@@ -2,46 +2,6 @@ import torch.nn.functional as F
 from B_Classifiacation.Util.Util import *
 from B_Classifiacation.Util.Draw_Graph import *
 
-config_small = {
-    'MODEL': {
-        'EXTRA': {
-            'STAGE1': {
-                'NUM_MODULES': 1,
-                'NUM_BRANCHES': 1,
-                'BLOCK': 'BOTTLENECK',
-                'NUM_BLOCKS': [4],
-                'NUM_CHANNELS': [64],
-                'FUSE_METHOD': 'SUM'
-            },
-            'STAGE2': {
-                'NUM_MODULES': 1,
-                'NUM_BRANCHES': 2,
-                'BLOCK': 'BASIC',
-                'NUM_BLOCKS': [4, 4],
-                'NUM_CHANNELS': [64, 128],
-                'FUSE_METHOD': 'SUM'
-            },
-            'STAGE3': {
-                'NUM_MODULES': 4,
-                'NUM_BRANCHES': 3,
-                'BLOCK': 'BASIC',
-                'NUM_BLOCKS': [4, 4, 4],
-                'NUM_CHANNELS': [64, 128, 256],
-                'FUSE_METHOD': 'SUM'
-            },
-            'STAGE4': {
-                'NUM_MODULES': 3,
-                'NUM_BRANCHES': 4,
-                'BLOCK': 'BASIC',
-                'NUM_BLOCKS': [4, 4, 4, 4],
-                'NUM_CHANNELS': [64, 128, 256, 512],
-                'FUSE_METHOD': 'SUM'
-            }
-        }
-    }
-}
-
-
 class BasicBlock(nn.Module):
     expansion = 1
 
@@ -230,13 +190,36 @@ BN_MOMENTUM = 0.1
 
 
 class HighResolutionNet(nn.Module):
-    def __init__(self, cfg, **kwargs):
+    def __init__(self, cfg = 'W64', **kwargs):
         super(HighResolutionNet, self).__init__()
 
         self.transform_info = transforms.Compose([
-            transforms.Resize((1024, 1024)),
+            transforms.Resize((800, 800)),
             transforms.ToTensor(),
         ])
+
+        configs = {
+            'W18': [[1, 1, 'BOTTLENECK', [4], [18], 'SUM'],
+                    [1, 2, 'BASIC', [4, 4], [18, 36], 'SUM'],
+                    [4, 3, 'BASIC', [4, 4, 4], [18, 36, 72], 'SUM'],
+                    [3, 4, 'BASIC', [4, 4, 4, 4], [18, 36, 72, 144], 'SUM']],
+
+            'W32': [[1, 1, 'BOTTLENECK', [4], [32], 'SUM'],
+                    [1, 2, 'BASIC', [4, 4], [32, 64], 'SUM'],
+                    [4, 3, 'BASIC', [4, 4, 4], [32, 64, 128], 'SUM'],
+                    [3, 4, 'BASIC', [4, 4, 4, 4], [32, 64, 128, 256], 'SUM']],
+
+            'W48': [[1, 1, 'BOTTLENECK', [4], [48], 'SUM'],
+                    [1, 2, 'BASIC', [4, 4], [48, 96], 'SUM'],
+                    [4, 3, 'BASIC', [4, 4, 4], [48, 96, 192], 'SUM'],
+                    [3, 4, 'BASIC', [4, 4, 4, 4], [48, 96, 192, 384], 'SUM']],
+
+            'W64': [[1, 1, 'BOTTLENECK', [4], [64], 'SUM'],
+                    [1, 2, 'BASIC', [4, 4], [64, 128], 'SUM'],
+                    [4, 3, 'BASIC', [4, 4, 4], [64, 128, 256], 'SUM'],
+                    [3, 4, 'BASIC', [4, 4, 4, 4], [64, 128, 256, 512], 'SUM']]
+        }
+        self.stage_config = configs[cfg]
 
         self.conv1 = nn.Conv2d(3, 64, kernel_size=3, stride=2, padding=1, bias=False)
         self.bn1 = nn.BatchNorm2d(64, momentum=BN_MOMENTUM)
@@ -244,30 +227,30 @@ class HighResolutionNet(nn.Module):
         self.bn2 = nn.BatchNorm2d(64, momentum=BN_MOMENTUM)
         self.relu = nn.ReLU(inplace=True)
 
-        self.stage1_cfg = cfg['MODEL']['EXTRA']['STAGE1']
-        num_channels = self.stage1_cfg['NUM_CHANNELS'][0]
-        block = blocks_dict[self.stage1_cfg['BLOCK']]
-        num_blocks = self.stage1_cfg['NUM_BLOCKS'][0]
+        self.stage1_cfg = self.stage_config[0]
+        num_channels = self.stage1_cfg[4][0]
+        block = BasicBlock if self.stage1_cfg[2] == 'BASIC' else Bottleneck
+        num_blocks = self.stage1_cfg[3][0]
         self.layer1 = self._make_layer(block, 64, num_channels, num_blocks)
         stage1_out_channel = block.expansion * num_channels
 
-        self.stage2_cfg = cfg['MODEL']['EXTRA']['STAGE2']
-        num_channels = self.stage2_cfg['NUM_CHANNELS']
-        block = blocks_dict[self.stage2_cfg['BLOCK']]
+        self.stage2_cfg = self.stage_config[1]
+        num_channels = self.stage2_cfg[4]
+        block = BasicBlock if self.stage2_cfg[2] == 'BASIC' else Bottleneck
         num_channels = [num_channels[i] * block.expansion for i in range(len(num_channels))]
         self.transition1 = self._make_transition_layer([stage1_out_channel], num_channels)
         self.stage2, pre_stage_channels = self._make_stage(self.stage2_cfg, num_channels)
 
-        self.stage3_cfg = cfg['MODEL']['EXTRA']['STAGE3']
-        num_channels = self.stage3_cfg['NUM_CHANNELS']
-        block = blocks_dict[self.stage3_cfg['BLOCK']]
+        self.stage3_cfg = self.stage_config[2]
+        num_channels = self.stage3_cfg[4]
+        block = BasicBlock if self.stage3_cfg[2] == 'BASIC' else Bottleneck
         num_channels = [num_channels[i] * block.expansion for i in range(len(num_channels))]
         self.transition2 = self._make_transition_layer(pre_stage_channels, num_channels)
         self.stage3, pre_stage_channels = self._make_stage(self.stage3_cfg, num_channels)
 
-        self.stage4_cfg = cfg['MODEL']['EXTRA']['STAGE4']
-        num_channels = self.stage4_cfg['NUM_CHANNELS']
-        block = blocks_dict[self.stage4_cfg['BLOCK']]
+        self.stage4_cfg = self.stage_config[3]
+        num_channels = self.stage4_cfg[4]
+        block = BasicBlock if self.stage4_cfg[2] == 'BASIC' else Bottleneck
         num_channels = [num_channels[i] * block.expansion for i in range(len(num_channels))]
         self.transition3 = self._make_transition_layer(pre_stage_channels, num_channels)
         self.stage4, pre_stage_channels = self._make_stage(self.stage4_cfg, num_channels, multi_scale_output=True)
@@ -356,12 +339,12 @@ class HighResolutionNet(nn.Module):
         return nn.Sequential(*layers)
 
     def _make_stage(self, layer_config, num_inchannels, multi_scale_output=True):
-        num_modules = layer_config['NUM_MODULES']
-        num_branches = layer_config['NUM_BRANCHES']
-        num_blocks = layer_config['NUM_BLOCKS']
-        num_channels = layer_config['NUM_CHANNELS']
-        block = blocks_dict[layer_config['BLOCK']]
-        fuse_method = layer_config['FUSE_METHOD']
+        num_modules = layer_config[0]
+        num_branches = layer_config[1]
+        num_blocks = layer_config[3]
+        num_channels = layer_config[4]
+        block = BasicBlock if layer_config[2] == 'BASIC' else Bottleneck
+        fuse_method = layer_config[5]
 
         modules = []
         for i in range(num_modules):
@@ -388,7 +371,7 @@ class HighResolutionNet(nn.Module):
         x = self.layer1(x)
 
         x_list = []
-        for i in range(self.stage2_cfg['NUM_BRANCHES']):
+        for i in range(self.stage2_cfg[1]):
             if self.transition1[i] is not None:
                 x_list.append(self.transition1[i](x))
             else:
@@ -396,7 +379,7 @@ class HighResolutionNet(nn.Module):
         y_list = self.stage2(x_list)
 
         x_list = []
-        for i in range(self.stage3_cfg['NUM_BRANCHES']):
+        for i in range(self.stage3_cfg[1]):
             if self.transition2[i] is not None:
                 x_list.append(self.transition2[i](y_list[-1]))
             else:
@@ -404,7 +387,7 @@ class HighResolutionNet(nn.Module):
         y_list = self.stage3(x_list)
 
         x_list = []
-        for i in range(self.stage4_cfg['NUM_BRANCHES']):
+        for i in range(self.stage4_cfg[1]):
             if self.transition3[i] is not None:
                 x_list.append(self.transition3[i](y_list[-1]))
             else:
@@ -436,15 +419,12 @@ def main():
         config = yaml.safe_load(f)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = HighResolutionNet(config_small).to(device)
+    model = HighResolutionNet().to(device)
     # state = torch.load("D:/Model_Save_Folder/Best_Accuracy_Validation.pth")
     # model.load_state_dict(state)
     graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
 
-    transform_info =(
-        transforms.Compose([
-        transforms.Resize((1024, 1024)),
-        transforms.ToTensor(),]))
+    transform_info = model.return_transform_info()
     train_loader, validation_loader, test_loader = classification_data_loader(config['load_path'],
                                                                               config['batch_size'], transform_info)
 
