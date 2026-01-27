@@ -116,3 +116,27 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, opt
 
     test_acc = 100 * correct_test / total_test
     print(f'Final Test Accuracy: {test_acc:.2f}%')
+
+def eval_model(device, model, test_loader):
+    model.eval()
+    correct_test = 0
+    total_test = 0
+
+    dctLabel = test_loader.dataset.class_to_idx
+    lstLabel = [[0] for _ in range(len(test_loader.dataset.classes))]
+    for i in range(len(test_loader.dataset.classes)):
+        lstLabel[i][0] = test_loader.dataset.targets.count(i)
+        lstLabel[i].append(0) # 예측 결과 저장용
+
+    with torch.no_grad():
+        for inputs, labels in test_loader:
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+            _, predicted = outputs.max(1)
+            total_test += labels.size(0)
+            correct_test += predicted.eq(labels).sum().item()
+            lstLabel[predicted][1] += 1
+
+
+    test_acc = 100 * correct_test / total_test
+    print(f'Final Test Accuracy: {test_acc:.2f}%')

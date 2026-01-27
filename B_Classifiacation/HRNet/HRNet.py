@@ -194,7 +194,7 @@ class HighResolutionNet(nn.Module):
         super(HighResolutionNet, self).__init__()
 
         self.transform_info = transforms.Compose([
-            transforms.Resize((800, 800)),
+            transforms.Resize((224, 224)),
             transforms.ToTensor(),
         ])
 
@@ -420,18 +420,20 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = HighResolutionNet().to(device)
-    # state = torch.load("D:/Model_Save_Folder/Best_Accuracy_Validation.pth")
-    # model.load_state_dict(state)
+
     graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
 
     transform_info = model.return_transform_info()
     train_loader, validation_loader, test_loader = classification_data_loader(config['load_path'],
                                                                               config['batch_size'], transform_info)
 
-    train_model(device=device, model=model, epochs=config['epoch'], patience=config['patience'],
-                train_loader=train_loader,
-                val_loader=validation_loader, test_loader=test_loader, lr=0.001, graph=graph)
+#    train_model(device=device, model=model, epochs=config['epoch'], patience=config['patience'],
+#                train_loader=train_loader,
+#                val_loader=validation_loader, test_loader=test_loader, lr=0.001, graph=graph)
 
+    state = torch.load("D:/0. Model_Save_Folder/Model_Save_Folder_HRNet_224x224/Best_Accuracy_Validation.pth")
+    model.load_state_dict(state)
+    eval_model(device=device, model=model, test_loader=test_loader)
 
 if __name__ == "__main__":
     main()
