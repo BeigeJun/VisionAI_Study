@@ -123,10 +123,10 @@ def eval_model(device, model, test_loader):
     total_test = 0
 
     dctLabel = test_loader.dataset.class_to_idx
-    lstLabel = [[0] for _ in range(len(test_loader.dataset.classes))]
+    lstLabel = [[[0, 0] for _ in range(len(test_loader.dataset.classes))] for _ in range(len(test_loader.dataset.classes))]
+
     for i in range(len(test_loader.dataset.classes)):
-        lstLabel[i][0] = test_loader.dataset.targets.count(i)
-        lstLabel[i].append(0) # 예측 결과 저장용
+        lstLabel[i][i][0] = test_loader.dataset.targets.count(i)
 
     with torch.no_grad():
         for inputs, labels in test_loader:
@@ -135,8 +135,28 @@ def eval_model(device, model, test_loader):
             _, predicted = outputs.max(1)
             total_test += labels.size(0)
             correct_test += predicted.eq(labels).sum().item()
-            lstLabel[predicted][1] += 1
+            lstLabel[predicted][labels[0]][1] += 1
 
+    numLabels = len(test_loader.dataset.classes)
+    precisions = [0.0] * numLabels
+    recalls = [0.0] * numLabels
+    f1_scores = [0.0] * numLabels
+
+    for row in range(numLabels):
+        sumRecall = sum(lstLabel[row][col][1] for col in range(numLabels))
+        if sumRecall > 0:
+            recalls[row] = lstLabel[row][row][1] / sumRecall
+
+        sumPrecision = sum(lstLabel[col][row][1] for col in range(numLabels))
+        if sumPrecision > 0:
+            precisions[row] = lstLabel[row][row][1] / sumPrecision
+
+        if precisions[row] + recalls[row] > 0:
+            f1_scores[row] = 2 * precisions[row] * recalls[row] / (precisions[row] + recalls[row])
+
+    precision = sum(precisions) / numLabels * 100
+    recall = sum(recalls) / numLabels * 100
+    f1_score = sum(f1_scores) / numLabels * 100
 
     test_acc = 100 * correct_test / total_test
-    print(f'Final Test Accuracy: {test_acc:.2f}%')
+    print(f'Final Test Accuracy : {test_acc:.2f}%, Recall : {recall:.2f}%, Precision : {precision:.2f}%, F1-score : {f1_score:.2f}%')
