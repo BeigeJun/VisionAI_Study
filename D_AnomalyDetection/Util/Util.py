@@ -1,4 +1,5 @@
 import os
+import cv2
 import yaml
 import torch
 from tqdm import tqdm
@@ -18,8 +19,60 @@ def save_batch_images(images, folder_path, prefix='output', batch_num=0, n=4):
         save_path = os.path.join(folder_path, f'{batch_num}_{prefix}_{i}.png')
         pil_img.save(save_path)
 
+
+def make_patch_dataset(str_path, nPatchSize, nStride):
+    strPatchRoot = str_path + "_Patch_Dataset"
+    os.makedirs(strPatchRoot, exist_ok=True)
+
+    splits = [name for name in os.listdir(str_path) if os.path.isdir(os.path.join(str_path, name))]
+
+    for split in splits:
+        strSplitPath = os.path.join(str_path, split)
+        labels = [name for name in os.listdir(strSplitPath) if os.path.isdir(os.path.join(strSplitPath, name))]
+
+        for label in labels:
+            strSavePath = os.path.join(strPatchRoot, split, label)
+            os.makedirs(strSavePath, exist_ok=True)
+
+            strFolderPath = os.path.join(strSplitPath, label)
+
+            for image_name in os.listdir(strFolderPath):
+                img = cv2.imread(os.path.join(strFolderPath, image_name))
+                if img is None: continue
+
+                nHeight, nWidth = img.shape[:2]
+                nNewHeight, nNewWidth = nPatchSize, nPatchSize
+
+                patches = []
+                while nNewHeight <= nHeight:
+                    while nNewWidth <= nWidth:
+                        patches.append(img[nNewHeight - nPatchSize:nNewHeight, nNewWidth - nPatchSize:nNewWidth])
+                        nNewWidth += nStride
+                    nNewWidth = nPatchSize
+                    nNewHeight += nStride
+
+                for i, patch in enumerate(patches):
+                    save_name = f"{os.path.splitext(image_name)[0]}_{i}.jpg"
+                    cv2.imwrite(os.path.join(strSavePath, save_name), patch)
+
 def anomalydetection_data_loader(str_path, batch_size, info):
     transform_info = info
+
+    train_dataset = ImageFolder(root=str_path + "_Patch_Dataset" + "//train", transform=transform_info)
+    validation_dataset = ImageFolder(root=str_path + "_Patch_Dataset" + "//validation", transform=transform_info)
+    test_dataset = ImageFolder(root=str_path + "_Patch_Dataset" + "//test", transform=transform_info)
+
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, num_workers=4, shuffle=True)
+    validation_loader = torch.utils.data.DataLoader(validation_dataset, batch_size=batch_size, num_workers=4, shuffle=False)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, num_workers=4, shuffle=False)
+
+    return train_loader, validation_loader, test_loader
+
+
+def anomalydetection_data_loader_PatchVer(str_path, batch_size, patch_size, stride, info):
+    transform_info = info
+
+    make_patch_dataset(str_path, patch_size, stride)
 
     train_dataset = ImageFolder(root=str_path + "//train", transform=transform_info)
     validation_dataset = ImageFolder(root=str_path + "//validation", transform=transform_info)

@@ -1,4 +1,4 @@
-load_path : 'D:\1-2. MvTec_Anomaly\1.Bottel'
+load_path : 'D:\1. DataSet\1-2. MvTec_Anomaly\1.Bottel'
 save_path : 'D:\0. Model_Save_Folder'
 
 epoch : 1000
