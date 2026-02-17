@@ -2,6 +2,7 @@ import os
 import cv2
 import yaml
 import torch
+from PIL import Image
 from tqdm import tqdm
 import torch.nn as nn
 import torch.optim as optim
@@ -232,6 +233,171 @@ def train_model(device, model, train_loader, val_loader, test_loader, graph, epo
                 save_batch_images(outputs, folder_path='D://0. Model_Save_Folder//output_test_images',
                                   batch_num = total_test, prefix=f'output_' + listPredict[pred])
             nCount += 1
+
+    test_acc = 100 * correct_test / total_test
+    print(f'Final Test Accuracy: {test_acc:.2f}%')
+
+    graph.save_test_info(
+        total=total_test,
+        correct=correct_test,
+        accuracy=test_acc
+    )
+
+
+def load_batch(path_label_list, indices, transform):
+    """path_label_list: [(path, label), ...], indices: list of int"""
+    imgs, labels = [], []
+    for idx in indices:
+        path, label = path_label_list[idx]
+        img = Image.open(path).convert("RGB")
+        imgs.append(transform(img))
+        labels.append(label)
+    return torch.stack(imgs), torch.tensor(labels, dtype=torch.long)
+
+
+def train_model_patch(device, model, train_loader, val_loader, test_loader, graph, transform_info, epochs=20, lr=0.01, patience=5,
+                graph_update_epoch=1, batch_size=32):
+
+    if model.model_name == "AutoEncoder":
+        criterion = SSIM()
+    else:
+        criterion = nn.CrossEntropyLoss()
+
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    Best_val_loss = 100
+    patience_count = 0
+
+    pbar = tqdm(total=epochs, desc='Total Progress', position=0)
+
+    lstTrainLosses = []
+    lstValLosses = []
+    lstValPredictLabel = []
+    fMaxLoss = 0.0
+
+    for epoch in range(epochs):
+        model.train()
+
+        lstTrainLosses.clear()
+        lstValLosses.clear()
+        lstValPredictLabel.clear()
+
+        indices = torch.randperm(len(train_loader)).tolist()
+
+        for i in range(0, len(train_loader), batch_size):
+            batch_indices = indices[i: i + batch_size]
+            inputs, labels = load_batch(train_loader, batch_indices, transform_info)
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+            outputs = model(inputs)
+            loss = criterion(inputs, outputs)
+            loss.backward()
+            optimizer.step()
+
+            save_batch_images(outputs, folder_path='D://0. Model_Save_Folder//output_train_images',
+                              prefix=f'epoch_{epoch}')
+            lstTrainLosses.append(loss.item())
+
+        train_loss = sum(lstTrainLosses) / len(lstTrainLosses)
+        fMaxLoss = max(lstTrainLosses)
+
+        model.eval()
+
+        with torch.no_grad():
+            for nCount, i in enumerate(range(0, len(val_loader), batch_size)):
+                batch_indices = list(range(i, min(i + batch_size, len(val_loader))))
+                inputs, labels = load_batch(val_loader, batch_indices, transform_info)
+                inputs = inputs.to(device)
+
+                outputs = model(inputs)
+                loss = criterion(inputs, outputs)
+                lstValLosses.append(loss.item())
+
+                if fMaxLoss > lstValLosses[nCount]:
+                    lstValPredictLabel.append(0)
+                else:
+                    lstValPredictLabel.append(1)
+
+                save_batch_images(outputs, folder_path='D://0. Model_Save_Folder//output_validation_images',
+                                  prefix=f'epoch_{epoch}')
+
+        val_acc = 100 * lstValPredictLabel.count(0) / len(lstValPredictLabel)
+        val_loss = sum(lstValLosses) / len(lstValLosses)
+
+        if val_loss < Best_val_loss:
+            Best_val_loss = val_loss
+            patience_count = 0
+        else:
+            patience_count += 1
+            if patience_count >= patience:
+                print(f'Early stopping at epoch {epoch + 1}')
+                break
+
+        if (epoch + 1) % graph_update_epoch == 0:
+            graph.update_graph(
+                train_acc=100,
+                train_loss=train_loss,
+                val_acc=val_acc,
+                val_loss=val_loss,
+                epoch=epoch,
+                patience_count=patience_count
+            )
+            graph.save_plt()
+
+        pbar.set_postfix({
+            'Epoch': epoch + 1,
+            'Train Loss': f'{train_loss:.4f}',
+            'Val Acc': f'{val_acc:.2f}%',
+            'Val Loss': f'{val_loss:.4f}',
+            'Best Val Loss': f'{Best_val_loss:.8f}'
+        })
+        pbar.update(1)
+
+    graph.save_plt()
+    graph.save_train_info(patience_count)
+
+    best_model_path = os.path.join(graph.save_path, 'Bottom_Loss_Train.pth')
+    model.load_state_dict(torch.load(best_model_path))
+    model.eval()
+
+    lstLosses = []
+
+    with torch.no_grad():
+        for i in range(0, len(val_loader), batch_size):
+            batch_indices = list(range(i, min(i + batch_size, len(val_loader))))
+            inputs, labels = load_batch(val_loader, batch_indices, transform_info)
+            inputs = inputs.to(device)
+            outputs = model(inputs)
+
+            for j in range(inputs.size(0)):
+                loss = criterion(inputs[j:j + 1], outputs[j:j + 1])
+                lstLosses.append(loss.item())
+
+    model.Threshold = max(lstLosses)
+
+    correct_test = 0
+    total_test = 0
+    Predict_results = []
+    listPredict = ["TRUE", "FALSE"]
+
+    with torch.no_grad():
+        for i in range(0, len(test_loader), batch_size):
+            batch_indices = list(range(i, min(i + batch_size, len(test_loader))))
+            inputs, labels = load_batch(test_loader, batch_indices, transform_info)
+            inputs, labels = inputs.to(device), labels.to(device)
+            outputs = model(inputs)
+
+            for j in range(inputs.size(0)):
+                loss = criterion(inputs[j:j + 1], outputs[j:j + 1])
+                pred = 0 if loss > model.Threshold else 1
+                Predict_results.append(pred)
+                correct_test += (pred == labels[j].item())
+                total_test += 1
+
+                save_batch_images(inputs, folder_path='D://0. Model_Save_Folder//output_test_images',
+                                  batch_num=total_test, prefix=f'input_' + listPredict[pred])
+                save_batch_images(outputs, folder_path='D://0. Model_Save_Folder//output_test_images',
+                                  batch_num=total_test, prefix=f'output_' + listPredict[pred])
 
     test_acc = 100 * correct_test / total_test
     print(f'Final Test Accuracy: {test_acc:.2f}%')

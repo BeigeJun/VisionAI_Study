@@ -83,8 +83,8 @@ def main():
     train_loader, validation_loader, test_loader = anomalydetection_data_loader_PatchVer(config['load_path'],
                                                                               config['batch_size'], 300, 100, transform_info)
 
-    train_model(device=device, model=model, epochs=config['epoch'], patience=config['patience'], train_loader=train_loader,
-                val_loader=validation_loader, test_loader=test_loader, lr=0.001, graph=graph)
+    train_model_patch(device=device, model=model, epochs=config['epoch'], patience=config['patience'], train_loader=train_loader,
+                val_loader=validation_loader, test_loader=test_loader, lr=0.001, graph=graph, transform_info=transform_info)
 
 if __name__ == "__main__":
     main()
