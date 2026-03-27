@@ -1,0 +1,11 @@
+load_path : 'D:/1. DataSet/bottle' 
+save_path : 'D:/Model_Save_Folder_Unet'
+
+input_size : 512
+ignore_index : 255 
+epoch : 100
+patience : 100
+batch_size : 4
+
+num_class : 4
+
