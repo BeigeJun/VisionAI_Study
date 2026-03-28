@@ -12,9 +12,9 @@ import glob
 import matplotlib.pyplot as plt
 
 
-LABEL_MAP = {'good': 0, 'broken_large': 1, 'broken_small': 2, 'contamination': 3}
-CLASS_NAMES = ['Normal', 'Broken_Large', 'Broken_Small', 'Contamination']
-CLASS_COLORS = [(0, 0, 0), (0, 0, 255), (0, 255, 0), (255, 0, 0)] # BGR
+LABEL_MAP = { 'good': 0, 'broken': 1, 'contamination': 2}
+CLASS_NAMES = [ 'Good', 'Broken', 'Contamination']
+CLASS_COLORS = [ (0, 0, 255), (0, 255, 0), (255, 0, 0)] # BGR
 
 class MVTecMultiDataset(Dataset):
     def __init__(self, root, split='train', input_size=(1024, 1024)):
@@ -69,17 +69,20 @@ def segmentation_data_loader(str_path, batch_size, input_size_dl):
     return train_loader, val_loader, test_loader
 
 def train_model(device, model, train_loader, val_loader, graph, epochs=100, lr=1e-4, patience=10, save_path="checkpoints"):
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0001, nesterov=True)
     criterion = nn.CrossEntropyLoss()
     best_val_loss = float('inf')
     patience_count = 0
+    Best_val_loss = 100
+    pbar = tqdm(total=epochs, desc='Total Progress', position=0)
+
     os.makedirs(save_path, exist_ok=True)
 
     for epoch in range(epochs):
         model.train()
         train_loss, train_correct, train_total = 0.0, 0, 0
         
-        for imgs, masks in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]"):
+        for imgs, masks in train_loader:
             imgs, masks = imgs.to(device), masks.to(device).long()
             optimizer.zero_grad()
             outputs = model(imgs)
@@ -107,8 +110,20 @@ def train_model(device, model, train_loader, val_loader, graph, epochs=100, lr=1
         avg_val_loss = val_loss / len(val_loader)
         val_acc = (val_correct / val_total_pixels) * 100
 
+        if val_loss < Best_val_loss:
+            Best_val_loss = val_loss
+            patience_count = 0
+
         graph.update_graph(train_acc, avg_train_loss, val_acc, avg_val_loss, epoch, patience_count)
-        print(f"E{epoch+1} | T_Loss: {avg_train_loss:.4f} | V_Loss: {avg_val_loss:.4f} | V_Acc: {val_acc:.2f}%")
+
+        pbar.set_postfix({
+            'Epoch': epoch + 1,
+            'Train Loss': f'{train_loss:.4f}',
+            'Val Acc': f'{val_acc:.2f}%',
+            'Val Loss': f'{val_loss:.4f}',
+            'Best Val Loss': f'{Best_val_loss:.8f}'
+        })
+        pbar.update(1)
 
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss

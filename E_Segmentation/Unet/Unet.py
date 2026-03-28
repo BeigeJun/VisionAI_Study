@@ -19,7 +19,7 @@ class DoubleConv(nn.Module):
     def forward(self, x): return self.net(x)
 
 class UNet(nn.Module):
-    def __init__(self, num_classes=4):
+    def __init__(self, num_classes):
         super().__init__()
         self.enc1 = DoubleConv(3, 64); self.enc2 = DoubleConv(64, 128)
         self.enc3 = DoubleConv(128, 256); self.enc4 = DoubleConv(256, 512)
@@ -55,14 +55,13 @@ def main():
     )
 
     graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
+    #model.load_state_dict(torch.load(os.path.join(config['save_path'], "Best_Accuracy_Validation.pth")))
+    train_model(
+        device=device, model=model, train_loader=train_loader, 
+        val_loader=val_loader, graph=graph, epochs=config['epoch'], 
+        lr=1e-4, patience=config['patience'], save_path=config['save_path']
+    )
 
-    # train_model(
-    #     device=device, model=model, train_loader=train_loader, 
-    #     val_loader=val_loader, graph=graph, epochs=config['epoch'], 
-    #     lr=1e-4, patience=config['patience'], save_path=config['save_path']
-    # )
-
-    model.load_state_dict(torch.load(os.path.join(config['save_path'], "Best_Accuracy_Validation.pth")))
     visualize_random_10(model, device, config['load_path'], config['input_size'])
 
 if __name__ == "__main__":
