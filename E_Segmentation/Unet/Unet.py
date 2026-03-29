@@ -55,12 +55,12 @@ def main():
     )
 
     graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
-    #model.load_state_dict(torch.load(os.path.join(config['save_path'], "Best_Accuracy_Validation.pth")))
-    train_model(
-        device=device, model=model, train_loader=train_loader, 
-        val_loader=val_loader, graph=graph, epochs=config['epoch'], 
-        lr=1e-4, patience=config['patience'], save_path=config['save_path']
-    )
+    model.load_state_dict(torch.load(os.path.join(config['save_path'], "Best_Accuracy_Validation.pth")))
+    # train_model(
+    #     device=device, model=model, train_loader=train_loader, 
+    #     val_loader=val_loader, graph=graph, epochs=config['epoch'], 
+    #     lr=1e-4, patience=config['patience'], save_path=config['save_path']
+    # )
 
     visualize_random_10(model, device, config['load_path'], config['input_size'])
 

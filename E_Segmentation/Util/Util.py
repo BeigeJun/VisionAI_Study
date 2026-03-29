@@ -69,7 +69,8 @@ def segmentation_data_loader(str_path, batch_size, input_size_dl):
     return train_loader, val_loader, test_loader
 
 def train_model(device, model, train_loader, val_loader, graph, epochs=100, lr=1e-4, patience=10, save_path="checkpoints"):
-    optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0001, nesterov=True)
+    #optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=0.0001, nesterov=True)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = nn.CrossEntropyLoss()
     best_val_loss = float('inf')
     patience_count = 0
