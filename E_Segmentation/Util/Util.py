@@ -74,7 +74,7 @@ def train_model(device, model, train_loader, val_loader, graph, epochs=100, lr=1
     criterion = nn.CrossEntropyLoss()
     best_val_loss = float('inf')
     patience_count = 0
-    Best_val_loss = 100
+    Best_val_loss = float('inf')
     pbar = tqdm(total=epochs, desc='Total Progress', position=0)
 
     os.makedirs(save_path, exist_ok=True)
@@ -87,12 +87,17 @@ def train_model(device, model, train_loader, val_loader, graph, epochs=100, lr=1
             imgs, masks = imgs.to(device), masks.to(device).long()
             optimizer.zero_grad()
             outputs = model(imgs)
-            loss = criterion(outputs, masks)
+            if hasattr(model, 'deep_supervision') and model.deep_supervision:
+                loss = sum(criterion(out, masks) for out in outputs) / len(outputs)
+                final_out = outputs[-1]
+            else:
+                loss = criterion(outputs, masks)
+                final_out = outputs
             loss.backward()
             optimizer.step()
             
             train_loss += loss.item()
-            train_correct += (outputs.argmax(1) == masks).sum().item()
+            train_correct += (final_out.argmax(1) == masks).sum().item()
             train_total += masks.numel()
 
         avg_train_loss = train_loss / len(train_loader)
@@ -104,8 +109,14 @@ def train_model(device, model, train_loader, val_loader, graph, epochs=100, lr=1
             for imgs, masks in val_loader:
                 imgs, masks = imgs.to(device), masks.to(device).long()
                 outputs = model(imgs)
-                val_loss += criterion(outputs, masks).item()
-                val_correct += (outputs.argmax(1) == masks).sum().item()
+                if hasattr(model, 'deep_supervision') and model.deep_supervision:
+                    v_loss = sum(criterion(out, masks) for out in outputs) / len(outputs)
+                    final_v_out = outputs[-1]
+                else:
+                    v_loss = criterion(outputs, masks)
+                    final_v_out = outputs
+                val_loss += v_loss.item()
+                val_correct += (final_v_out.argmax(1) == masks).sum().item()
                 val_total_pixels += masks.numel()
 
         avg_val_loss = val_loss / len(val_loader)
