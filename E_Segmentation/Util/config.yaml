@@ -1,5 +1,5 @@
 load_path : 'D:/1. DataSet/bottle_merged' 
-save_path : 'D:/Model_Save_Folder_UNet512512'
+save_path : 'D:/Model_Save_Folder_TransUNet'
 
 input_size : 512
 ignore_index : 255 

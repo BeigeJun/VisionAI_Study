@@ -181,3 +181,31 @@ def visualize_random_10(model, device, load_path, input_size=1024):
         
         plt.tight_layout()
         plt.show(block=True)
+
+
+def visualize_all_test_set(model, device, load_path, input_size=1024):
+    model.eval()
+    val_ds = MVTecMultiDataset(load_path, split='test', input_size=(input_size, input_size))
+    inv_norm = transforms.Normalize(mean=[-0.485/0.229, -0.456/0.224, -0.406/0.225], std=[1/0.229, 1/0.224, 1/0.225])
+    
+    plt.ion() 
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 6))
+    
+    for idx in range(len(val_ds)):
+        img_t, _ = val_ds[idx]
+        with torch.no_grad():
+            output = model(img_t.unsqueeze(0).to(device))
+            pred = output.argmax(dim=1)[0].cpu().numpy().astype(np.uint8)
+        
+        img_vis = (inv_norm(img_t).permute(1, 2, 0).numpy().clip(0, 1) * 255).astype(np.uint8)
+        res_img = draw_results(img_vis, pred)
+
+        ax1.clear(); ax1.imshow(img_vis); ax1.set_title(f"[{idx+1}/{len(val_ds)}] Original"); ax1.axis('off')
+        ax2.clear(); ax2.imshow(cv2.cvtColor(res_img, cv2.COLOR_BGR2RGB)); ax2.set_title("Prediction"); ax2.axis('off')
+        
+        plt.draw()
+        if not plt.waitforbuttonpress():
+            break
+
+    plt.ioff()
+    plt.close()
