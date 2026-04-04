@@ -21,24 +21,55 @@ class DoubleConv(nn.Module):
 class UNet(nn.Module):
     def __init__(self, num_classes):
         super().__init__()
-        self.enc1 = DoubleConv(3, 64); self.enc2 = DoubleConv(64, 128)
-        self.enc3 = DoubleConv(128, 256); self.enc4 = DoubleConv(256, 512)
-        self.bottom = DoubleConv(512, 1024); self.pool = nn.MaxPool2d(2)
-        self.up1 = nn.ConvTranspose2d(1024, 512, 2, stride=2); self.dec1 = DoubleConv(1024, 512)
-        self.up2 = nn.ConvTranspose2d(512, 256, 2, stride=2); self.dec2 = DoubleConv(512, 256)
-        self.up3 = nn.ConvTranspose2d(256, 128, 2, stride=2); self.dec3 = DoubleConv(256, 128)
-        self.up4 = nn.ConvTranspose2d(128, 64, 2, stride=2); self.dec4 = DoubleConv(128, 64)
+        self.enc1 = DoubleConv(3, 64)
+        self.enc2 = DoubleConv(64, 128)
+        self.enc3 = DoubleConv(128, 256)
+        self.enc4 = DoubleConv(256, 512)
+        self.bottom = DoubleConv(512, 1024)
+        self.pool = nn.MaxPool2d(2)
+        self.up1 = nn.ConvTranspose2d(1024, 512, 2, stride=2)
+        self.dec1 = DoubleConv(1024, 512)
+        self.up2 = nn.ConvTranspose2d(512, 256, 2, stride=2)
+        self.dec2 = DoubleConv(512, 256)
+        self.up3 = nn.ConvTranspose2d(256, 128, 2, stride=2)
+        self.dec3 = DoubleConv(256, 128)
+        self.up4 = nn.ConvTranspose2d(128, 64, 2, stride=2)
+        self.dec4 = DoubleConv(128, 64)
         self.out_conv = nn.Conv2d(64, num_classes, kernel_size=1)
 
     def forward(self, x):
-        c1 = self.enc1(x); p1 = self.pool(c1); c2 = self.enc2(p1); p2 = self.pool(c2)
-        c3 = self.enc3(p2); p3 = self.pool(c3); c4 = self.enc4(p3); p4 = self.pool(c4)
+        c1 = self.enc1(x)
+        p1 = self.pool(c1)
+        c2 = self.enc2(p1)
+        p2 = self.pool(c2)
+        c3 = self.enc3(p2)
+        p3 = self.pool(c3)
+        c4 = self.enc4(p3)
+        p4 = self.pool(c4)
         b = self.bottom(p4)
         d1 = self.dec1(torch.cat([self.up1(b), c4], 1))
         d2 = self.dec2(torch.cat([self.up2(d1), c3], 1))
         d3 = self.dec3(torch.cat([self.up3(d2), c2], 1))
         d4 = self.dec4(torch.cat([self.up4(d3), c1], 1))
         return self.out_conv(d4)
+    
+
+# (Input)                         (Output)
+#    ▼                               ▲
+# [enc1] ──────────skip────────► [dec4]
+# (64 ch)                       (64 ch)
+#    ▼                           ▲
+#     [enc2] ──────skip─────► [dec3]
+#    (128 ch)                (128 ch)
+#        ▼                     ▲
+#       [enc3] ────skip───► [dec2]
+#       (256 ch)           (256 ch)
+#           ▼                ▲
+#         [enc4] ──skip─► [dec1]
+#        (512 ch)        (512 ch)
+#            ▼               ▲        
+#            └──[ bottom ]───┘
+#                (1024 ch)
     
 
 def main():
