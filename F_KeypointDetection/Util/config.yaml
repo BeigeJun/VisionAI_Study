@@ -1,0 +1,9 @@
+load_path : 'D:/1. DataSet/3. Coco Keypoint' 
+save_path : 'D:/0. Model_Save_Folder/HRNet_KeyPoint_Detection'
+
+epoch : 1
+patience : 100
+batch_size : 1
+
+num_class : 3
+
