@@ -1,8 +1,14 @@
+import sys
+import os
+import yaml
+root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if root_path not in sys.path:
+    sys.path.append(root_path)
 from B_Classifiacation.Util.Util import *
 from B_Classifiacation.Util.Draw_Graph import *
 
 class MobileNetV3(nn.Module):
-    def __init__(self, model_type='large', alpha=1.0, num_class=10):
+    def __init__(self, model_type='small', alpha=1.0, num_class=10):
         super().__init__()
 
         self.transform_info = transforms.Compose([
