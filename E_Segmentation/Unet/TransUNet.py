@@ -119,7 +119,7 @@ def main():
         config['load_path'], config['batch_size'], config['input_size']
     )
 
-    graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
+    #graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
     model.load_state_dict(torch.load(os.path.join(config['save_path'], "Best_Accuracy_Validation.pth")))
     # train_model(
     #     device=device, model=model, train_loader=train_loader, 

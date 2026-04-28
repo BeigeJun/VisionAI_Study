@@ -10,7 +10,7 @@ import torch.onnx
 import torchvision.models as models
 from E_Segmentation.Unet.TransUNet import TransUNet
 
-model_path = "D:/0. Model_Save_Folder/Model_Save_Folder_TransUNet"
+model_path = "D:/0. Model_Save_Folder/Model_Save_Folder_Trans"
 
 model = TransUNet(num_classes = 3)
 model.load_state_dict(torch.load(model_path + "/Bottom_Loss_Validation.pth"))

@@ -17,7 +17,7 @@ class Logger : public ILogger {
 } gLogger;
 
 int main() {
-    std::string strBasePath = "D:/0. Model_Save_Folder/Model_Save_Folder_TransUNet";
+    std::string strBasePath = "D:/0. Model_Save_Folder/Model_Save_Folder_Trans";
     std::string strOnnxPath = strBasePath + "/model.onnx";
     std::string strTrtPath = strBasePath + "/model.trt";
 
@@ -42,12 +42,12 @@ int main() {
     //TensorRT 설정을 저장할 Config 생성
     IBuilderConfig* pConfig = pBuilder->createBuilderConfig();
 
-    //FP16 지원 확인 후 가능하다면 적용
-    if (pBuilder->platformHasFastFp16())
-    {
-        pConfig->setFlag(BuilderFlag::kFP16);
-        std::cout << "Apply FP16 Optimization" << std::endl;
-    }
+    ////FP16 지원 확인 후 가능하다면 적용
+    //if (pBuilder->platformHasFastFp16())
+    //{
+    //    pConfig->setFlag(BuilderFlag::kFP16);
+    //    std::cout << "Apply FP16 Optimization" << std::endl;
+    //}
 
     //직렬화된 모델을 메모리에 생성
     std::cout << "Build Start" << std::endl;
