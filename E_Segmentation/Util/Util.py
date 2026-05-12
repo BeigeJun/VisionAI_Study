@@ -182,7 +182,7 @@ def visualize_random_10(model, device, load_path, input_size=1024):
         plt.tight_layout()
         plt.show(block=True)
 
-
+import time
 def visualize_all_test_set(model, device, load_path, input_size=1024):
     model.eval()
     val_ds = MVTecMultiDataset(load_path, split='test', input_size=(input_size, input_size))
@@ -193,15 +193,38 @@ def visualize_all_test_set(model, device, load_path, input_size=1024):
     
     for idx in range(len(val_ds)):
         img_t, _ = val_ds[idx]
+        input_tensor = img_t.unsqueeze(0).to(device)
+        
+        if device.type == 'cuda':
+            torch.cuda.synchronize()
+        start_time = time.time()
+        
         with torch.no_grad():
-            output = model(img_t.unsqueeze(0).to(device))
-            pred = output.argmax(dim=1)[0].cpu().numpy().astype(np.uint8)
+            output = model(input_tensor)
+            
+        if device.type == 'cuda':
+            torch.cuda.synchronize()
+        end_time = time.time()
+        
+        inference_ms = (end_time - start_time) * 1000
+        
+        pred = output.argmax(dim=1)[0].cpu().numpy().astype(np.uint8)
         
         img_vis = (inv_norm(img_t).permute(1, 2, 0).numpy().clip(0, 1) * 255).astype(np.uint8)
         res_img = draw_results(img_vis, pred)
 
-        ax1.clear(); ax1.imshow(img_vis); ax1.set_title(f"[{idx+1}/{len(val_ds)}] Original"); ax1.axis('off')
-        ax2.clear(); ax2.imshow(cv2.cvtColor(res_img, cv2.COLOR_BGR2RGB)); ax2.set_title("Prediction"); ax2.axis('off')
+        ax1.clear()
+        ax1.imshow(img_vis)
+        ax1.set_title(f"[{idx+1}/{len(val_ds)}] Original")
+        ax1.axis('off')
+        
+        ax2.clear()
+        ax2.imshow(cv2.cvtColor(res_img, cv2.COLOR_BGR2RGB))
+
+        ax2.set_title(f"Prediction ({inference_ms:.2f} ms)")
+        ax2.axis('off')
+        
+        print(f"Image {idx+1}: {inference_ms:.2f} ms")
         
         plt.draw()
         if not plt.waitforbuttonpress():

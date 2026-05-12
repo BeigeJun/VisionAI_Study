@@ -59,9 +59,9 @@ def make_patch_dataset(str_path, nPatchSize, nStride):
 def anomalydetection_data_loader(str_path, batch_size, info):
     transform_info = info
 
-    train_dataset = ImageFolder(root=str_path + "_Patch_Dataset" + "//train", transform=transform_info)
-    validation_dataset = ImageFolder(root=str_path + "_Patch_Dataset" + "//validation", transform=transform_info)
-    test_dataset = ImageFolder(root=str_path + "_Patch_Dataset" + "//test", transform=transform_info)
+    train_dataset = ImageFolder(root=str_path + "//train", transform=transform_info)
+    validation_dataset = ImageFolder(root=str_path + "//validation", transform=transform_info)
+    test_dataset = ImageFolder(root=str_path + "//test", transform=transform_info)
 
     train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, num_workers=4, shuffle=True)
     validation_loader = torch.utils.data.DataLoader(validation_dataset, batch_size=batch_size, num_workers=4, shuffle=False)

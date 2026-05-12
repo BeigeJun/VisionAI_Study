@@ -12,11 +12,11 @@ from E_Segmentation.Unet.TransUNet import TransUNet
 
 model_path = "D:/0. Model_Save_Folder/Model_Save_Folder_Trans"
 
-model = TransUNet(num_classes = 3)
+model = TransUNet(num_classes = 3, img_size=900)
 model.load_state_dict(torch.load(model_path + "/Bottom_Loss_Validation.pth"))
 model.eval()
 
-dummy_input = torch.randn(1, 3, 512, 512)
+dummy_input = torch.randn(1, 3, 900, 900)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
@@ -29,7 +29,7 @@ torch.onnx.export(
     dummy_input,
     onnx_file_path,
     export_params=True,
-    opset_version=17,
+    opset_version=13,
     do_constant_folding=True,
     input_names=['input'],
     output_names=['output'],

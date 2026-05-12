@@ -1,11 +1,11 @@
 load_path : 'D:/1. DataSet/bottle_merged' 
 save_path : 'D:/0. Model_Save_Folder/Model_Save_Folder_Trans'
 
-input_size : 512
+input_size : 900
 ignore_index : 255 
 epoch : 10
 patience : 100
-batch_size : 4
+batch_size : 2
 
 num_class : 3
 

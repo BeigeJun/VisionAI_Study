@@ -7,6 +7,7 @@ if root_path not in sys.path:
 from E_Segmentation.Util.Util import *
 from E_Segmentation.Util.Draw_Graph import *
 from torchvision import models
+import torch.nn.functional as F
 
 class TransformerBlock(nn.Module):
     def __init__(self, dim, heads, mlp_dim):
@@ -51,9 +52,17 @@ class DecoderBlock(nn.Module):
         x = torch.cat([x, skip], dim=1)
         return self.conv(x)
 
+
 class TransUNet(nn.Module):
     def __init__(self, num_classes=1, img_size=512):
         super().__init__()
+
+        h, w = img_size, img_size
+
+        new_h = ((h + 15) // 16) * 16
+        new_w = ((w + 15) // 16) * 16
+        #아 정사각형 아닐때도 생각해야한다...
+
         resnet = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
         
         self.early_conv = nn.Sequential(resnet.conv1, resnet.bn1, resnet.relu) 
@@ -63,7 +72,7 @@ class TransUNet(nn.Module):
         self.layer2 = resnet.layer2
         self.layer3 = resnet.layer3
 
-        self.patch_size = img_size // 16
+        self.patch_size = new_h // 16
         num_patches = self.patch_size ** 2
         
         self.bottleneck_conv = nn.Conv2d(1024, 512, kernel_size=1)
@@ -80,6 +89,16 @@ class TransUNet(nn.Module):
         self.final_conv = nn.Conv2d(64, num_classes, kernel_size=1)
 
     def forward(self, x):
+            original_size = x.shape[-2:]
+
+            h, w = original_size
+
+            new_h = ((h + 15) // 16) * 16
+            new_w = ((w + 15) // 16) * 16
+
+            if h != new_h or w != new_w:
+                x = F.interpolate(x, size=(new_h, new_w), mode='bilinear', align_corners=True)
+
             s0 = x 
             s1 = self.early_conv(x)
             
@@ -101,6 +120,9 @@ class TransUNet(nn.Module):
 
             output = self.final_upsample(d3)
             output = self.final_conv(output)
+
+            if output.shape[-2:] != original_size:
+                output = F.interpolate(output, size=original_size, mode='bilinear', align_corners=True)
             
             return output
     
@@ -119,7 +141,7 @@ def main():
         config['load_path'], config['batch_size'], config['input_size']
     )
 
-    #graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
+    # graph = Draw_Graph(model=model, save_path=config['save_path'], patience=config['patience'])
     model.load_state_dict(torch.load(os.path.join(config['save_path'], "Best_Accuracy_Validation.pth")))
     # train_model(
     #     device=device, model=model, train_loader=train_loader, 
