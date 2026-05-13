@@ -11,6 +11,7 @@
 #include <iostream>
 #include <fstream>
 #include <algorithm>
+#include <queue>
 
 namespace fs = std::filesystem;
 
@@ -158,10 +159,15 @@ static void vArgmaxMask(const float* pOutput, int nH, int nW, std::vector<BYTE>&
     }
 }
 
-static void vDrawResults(const BgrImageInfo& stSrcInfo, const std::vector<BYTE>& vecMask, CImage& stResultImage)
+struct BlobRect {
+    int minX, minY, maxX, maxY;
+};
+
+static void vDrawResults(const BgrImageInfo& stSrcInfo, const BYTE* pMask, CImage& stResultImage)
 {
     const int nH = (int)stSrcInfo.nHeight;
     const int nW = (int)stSrcInfo.nWidth;
+
     stResultImage.Destroy();
     stResultImage.Create(nW, nH, 24);
 
@@ -173,7 +179,7 @@ static void vDrawResults(const BgrImageInfo& stSrcInfo, const std::vector<BYTE>&
         const BYTE* pSrcRow = stSrcInfo.vecBuffer.data() + (size_t)nY * stSrcInfo.nWidthStep;
 
         for (int nX = 0; nX < nW; ++nX) {
-            const BYTE nCls = vecMask[(size_t)nY * nW + nX];
+            const BYTE nCls = pMask[(size_t)nY * nW + nX];
             if (nCls == 0) {
                 pDstRow[nX * 3 + 0] = pSrcRow[nX * 3 + 0];
                 pDstRow[nX * 3 + 1] = pSrcRow[nX * 3 + 1];
@@ -192,29 +198,67 @@ static void vDrawResults(const BgrImageInfo& stSrcInfo, const std::vector<BYTE>&
     HFONT hOldFont = (HFONT)SelectObject(hDC, hFont);
     SetBkMode(hDC, TRANSPARENT);
 
-    for (int nCls = 1; nCls < nNumClasses; ++nCls) {
-        int nMinX = nW, nMinY = nH, nMaxX = -1, nMaxY = -1;
-        bool bIsFound = false;
-        for (int nY = 0; nY < nH; ++nY) {
-            for (int nX = 0; nX < nW; ++nX) {
-                if (vecMask[(size_t)nY * nW + nX] == nCls) {
-                    if (nX < nMinX) nMinX = nX; if (nY < nMinY) nMinY = nY;
-                    if (nX > nMaxX) nMaxX = nX; if (nY > nMaxY) nMaxY = nY;
-                    bIsFound = true;
+    std::vector<bool> vecVisited(nH * nW, false);
+
+    for (int nY = 0; nY < nH; ++nY) {
+        for (int nX = 0; nX < nW; ++nX) {
+            size_t nIdx = (size_t)nY * nW + nX;
+            BYTE nCls = pMask[nIdx];
+
+            if (nCls > 0 && !vecVisited[nIdx]) {
+                BlobRect rect = { nX, nY, nX, nY };
+                std::queue<std::pair<int, int>> q;
+
+                q.push({ nX, nY });
+                vecVisited[nIdx] = true;
+
+                int nPixelCount = 0;
+                while (!q.empty()) {
+                    std::pair<int, int> curr = q.front();
+                    q.pop();
+                    nPixelCount++;
+
+                    if (curr.first < rect.minX) rect.minX = curr.first;
+                    if (curr.first > rect.maxX) rect.maxX = curr.first;
+                    if (curr.second < rect.minY) rect.minY = curr.second;
+                    if (curr.second > rect.maxY) rect.maxY = curr.second;
+
+                    int dx[] = { 0, 0, 1, -1 };
+                    int dy[] = { 1, -1, 0, 0 };
+
+                    for (int i = 0; i < 4; ++i) {
+                        int nextX = curr.first + dx[i];
+                        int nextY = curr.second + dy[i];
+
+                        if (nextX >= 0 && nextX < nW && nextY >= 0 && nextY < nH) {
+                            size_t nextIdx = (size_t)nextY * nW + nextX;
+                            if (pMask[nextIdx] == nCls && !vecVisited[nextIdx]) {
+                                vecVisited[nextIdx] = true;
+                                q.push({ nextX, nextY });
+                            }
+                        }
+                    }
                 }
+
+                if (nPixelCount < 10) continue;
+
+                COLORREF color = RGB(pClsR[nCls], pClsG[nCls], pClsB[nCls]);
+                HPEN hPen = CreatePen(PS_SOLID, 2, color);
+                HPEN hOldPen = (HPEN)SelectObject(hDC, hPen);
+                SelectObject(hDC, GetStockObject(NULL_BRUSH));
+
+                Rectangle(hDC, rect.minX, rect.minY, rect.maxX + 1, rect.maxY + 1);
+
+                SetTextColor(hDC, color);
+                TextOutW(hDC, rect.minX + 2, (rect.minY > 18 ? rect.minY - 18 : rect.minY + 2),
+                    pSzClsName[nCls], (int)wcslen(pSzClsName[nCls]));
+
+                SelectObject(hDC, hOldPen);
+                DeleteObject(hPen);
             }
         }
-        if (!bIsFound) continue;
-        COLORREF color = RGB(pClsR[nCls], pClsG[nCls], pClsB[nCls]);
-        HPEN hPen = CreatePen(PS_SOLID, 2, color);
-        HPEN hOldPen = (HPEN)SelectObject(hDC, hPen);
-        SelectObject(hDC, GetStockObject(NULL_BRUSH));
-        Rectangle(hDC, nMinX, nMinY, nMaxX + 1, nMaxY + 1);
-        SetTextColor(hDC, color);
-        TextOutW(hDC, nMinX + 2, (nMinY > 18 ? nMinY - 18 : nMinY + 2), pSzClsName[nCls], (int)wcslen(pSzClsName[nCls]));
-        SelectObject(hDC, hOldPen);
-        DeleteObject(hPen);
     }
+
     SelectObject(hDC, hOldFont);
     DeleteObject(hFont);
     stResultImage.ReleaseDC();
@@ -225,8 +269,12 @@ static nvinfer1::ICudaEngine* pLoadEngine(const wchar_t* pSzTrtPath, nvinfer1::I
     char pSzPathA[MAX_PATH] = {};
     WideCharToMultiByte(CP_ACP, 0, pSzTrtPath, -1, pSzPathA, MAX_PATH, nullptr, nullptr);
     std::ifstream stFile(pSzPathA, std::ios::binary | std::ios::ate);
-    if (!stFile.is_open()) return nullptr;
+    
+    if (!stFile.is_open()) 
+        return nullptr;
+    
     const size_t nFileSize = (size_t)stFile.tellg();
+
     stFile.seekg(0);
     std::vector<char> vecEngineData(nFileSize);
     stFile.read(vecEngineData.data(), nFileSize);
@@ -237,7 +285,9 @@ static nvinfer1::ICudaEngine* pLoadEngine(const wchar_t* pSzTrtPath, nvinfer1::I
 static std::vector<fs::path> vecCollectImages(const fs::path& stDirPath)
 {
     std::vector<fs::path> vecImageList;
-    if (!fs::exists(stDirPath)) return vecImageList;
+    if (!fs::exists(stDirPath))
+        return vecImageList;
+
     for (const auto& stEntry : fs::directory_iterator(stDirPath)) {
         if (!stEntry.is_regular_file()) continue;
         auto wExt = stEntry.path().extension().wstring();
@@ -245,13 +295,14 @@ static std::vector<fs::path> vecCollectImages(const fs::path& stDirPath)
         if (wExt == L".png" || wExt == L".jpg" || wExt == L".jpeg" || wExt == L".bmp")
             vecImageList.push_back(stEntry.path());
     }
+
     std::sort(vecImageList.begin(), vecImageList.end());
     return vecImageList;
 }
 
 int wmain(int argc, wchar_t* argv[])
 {
-    const wchar_t* pSzTrtPath = L"D:/0. Model_Save_Folder/Model_Save_Folder_Trans/model.trt";
+    const wchar_t* pSzTrtPath = L"D:/0. Model_Save_Folder/Model_Save_Folder_Ha/model.trt";
     const fs::path stInputDir = L"D:/1. DataSet/CppImage";
     const fs::path stOutputDir = L"D:/1. DataSet/CppImage";
 
@@ -316,7 +367,7 @@ int wmain(int argc, wchar_t* argv[])
         vArgmaxMask(hOutput.data(), nInputH, nInputW, vecResultMask);
 
         CImage stFinalImage;
-        vDrawResults(stBgrInfo, vecResultMask, stFinalImage);
+        vDrawResults(stBgrInfo, vecResultMask.data(), stFinalImage);
 
         fs::path stSavePath = stOutputDir / (L"pred_" + stCurrentPath.stem().wstring() + L".png");
         stFinalImage.Save(stSavePath.wstring().c_str());

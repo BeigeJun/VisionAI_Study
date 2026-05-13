@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 LABEL_MAP = { 'good': 0, 'broken': 1, 'contamination': 2}
 CLASS_NAMES = [ 'Good', 'Broken', 'Contamination']
-CLASS_COLORS = [ (0, 0, 255), (0, 255, 0), (255, 0, 0)] # BGR
+CLASS_COLORS = [ (0, 0, 0), (0, 255, 0), (0, 0, 255)] # BGR
 
 class MVTecMultiDataset(Dataset):
     def __init__(self, root, split='train', input_size=(1024, 1024)):
