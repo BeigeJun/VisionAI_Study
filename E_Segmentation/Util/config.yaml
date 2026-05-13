@@ -1,5 +1,5 @@
 load_path : 'D:/1. DataSet/bottle_merged' 
-save_path : 'D:/0. Model_Save_Folder/Model_Save_Folder_HA'
+save_path : 'D:/0. Model_Save_Folder/Model_Save_Folder_Trans'
 
 input_size : 900
 ignore_index : 255 

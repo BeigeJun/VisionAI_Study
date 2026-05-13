@@ -1,5 +1,3 @@
-#define NOMINMAX
-
 #include <windows.h>
 #include <atlimage.h>
 #include <NvInfer.h>
@@ -43,7 +41,7 @@ public:
 
 static TrtLogger stLogger;
 
-struct BgrImageInfo
+struct ImageInfo
 {
     std::vector<unsigned char> vecBuffer;
     unsigned int nWidth = 0;
@@ -52,64 +50,42 @@ struct BgrImageInfo
     unsigned int nChannel = 0;
 };
 
-static bool bLoadFileToBgr(const wchar_t* pSzFileName, int nNeedW, int nNeedH, BgrImageInfo& stOutInfo)
+static bool bLoadFile(const wchar_t* pSzFileName, ImageInfo& stOutImageInfo)
 {
     CImage stImage;
     HRESULT hResult = stImage.Load(pSzFileName);
     if (FAILED(hResult)) return false;
 
-    if (stImage.GetBPP() != 24)
-    {
-        CImage stConv;
-        stConv.Create(stImage.GetWidth(), stImage.GetHeight(), 24);
-        stImage.BitBlt(stConv.GetDC(), 0, 0);
-        stConv.ReleaseDC();
-        stImage.Destroy();
-        stImage.Attach(stConv.Detach());
-    }
+    stOutImageInfo.nWidth = (unsigned int)stImage.GetWidth();
+    stOutImageInfo.nHeight = (unsigned int)stImage.GetHeight();
+    stOutImageInfo.nChannel = 3;
+    stOutImageInfo.nWidthStep = stOutImageInfo.nWidth * stOutImageInfo.nChannel;
+    stOutImageInfo.vecBuffer.resize((size_t)stOutImageInfo.nWidthStep * stOutImageInfo.nHeight);
 
-    if (stImage.GetWidth() != nNeedW || stImage.GetHeight() != nNeedH)
-    {
-        CImage stResized;
-        stResized.Create(nNeedW, nNeedH, 24);
-        HDC hDC = stResized.GetDC();
-        SetStretchBltMode(hDC, HALFTONE);
-        stImage.StretchBlt(hDC, 0, 0, nNeedW, nNeedH, SRCCOPY);
-        stResized.ReleaseDC();
-        stImage.Destroy();
-        stImage.Attach(stResized.Detach());
-    }
-
-    stOutInfo.nWidth = (unsigned int)stImage.GetWidth();
-    stOutInfo.nHeight = (unsigned int)stImage.GetHeight();
-    stOutInfo.nChannel = 3;
-    stOutInfo.nWidthStep = stOutInfo.nWidth * stOutInfo.nChannel;
-    stOutInfo.vecBuffer.resize((size_t)stOutInfo.nWidthStep * stOutInfo.nHeight);
-
-    for (unsigned int nY = 0; nY < stOutInfo.nHeight; ++nY)
+    for (unsigned int nY = 0; nY < stOutImageInfo.nHeight; ++nY)
     {
         BYTE* pRow = (BYTE*)stImage.GetPixelAddress(0, (int)nY);
         if (!pRow) return false;
-        std::memcpy(stOutInfo.vecBuffer.data() + (size_t)nY * stOutInfo.nWidthStep, pRow, stOutInfo.nWidthStep);
+        std::memcpy(stOutImageInfo.vecBuffer.data() + (size_t)nY * stOutImageInfo.nWidthStep, pRow, stOutInfo.nWidthStep);
     }
     return true;
 }
 
-static void vBgrImageToNhwcFloatTensor(const BgrImageInfo& stIm, std::vector<float>& vecInputTensor, bool bUseNormalize = true)
+static void vImageToTensor(const ImageInfo& stImageInfo, std::vector<float>& vecInputTensor, bool bUseNormalize = true)
 {
     const float pMean[3] = { 0.485f, 0.456f, 0.406f };
     const float pStdDev[3] = { 0.229f, 0.224f, 0.225f };
     const float fNormalizeValue = 1.0f / 255.0f;
 
-    const int64_t nWidth = stIm.nWidth;
-    const int64_t nHeight = stIm.nHeight;
-    const int64_t nChannel = stIm.nChannel;
+    const int64_t nWidth = stImageInfo.nWidth;
+    const int64_t nHeight = stImageInfo.nHeight;
+    const int64_t nChannel = stImageInfo.nChannel;
 
     vecInputTensor.resize((size_t)nWidth * nHeight * nChannel);
 
     for (int64_t nY = 0; nY < nHeight; ++nY)
     {
-        const unsigned char* pSrc = stIm.vecBuffer.data() + (size_t)nY * stIm.nWidthStep;
+        const unsigned char* pSrc = stImageInfo.vecBuffer.data() + (size_t)nY * stImageInfo.nWidthStep;
         float* pDst = vecInputTensor.data() + (size_t)nY * nWidth * nChannel;
         for (int64_t nX = 0; nX < nWidth; ++nX)
         {
@@ -163,7 +139,7 @@ struct BlobRect {
     int minX, minY, maxX, maxY;
 };
 
-static void vDrawResults(const BgrImageInfo& stSrcInfo, const BYTE* pMask, CImage& stResultImage)
+static void vDrawResults(const ImageInfo& stSrcInfo, const BYTE* pMask, CImage& stResultImage)
 {
     const int nH = (int)stSrcInfo.nHeight;
     const int nW = (int)stSrcInfo.nWidth;
@@ -269,10 +245,10 @@ static nvinfer1::ICudaEngine* pLoadEngine(const wchar_t* pSzTrtPath, nvinfer1::I
     char pSzPathA[MAX_PATH] = {};
     WideCharToMultiByte(CP_ACP, 0, pSzTrtPath, -1, pSzPathA, MAX_PATH, nullptr, nullptr);
     std::ifstream stFile(pSzPathA, std::ios::binary | std::ios::ate);
-    
-    if (!stFile.is_open()) 
+
+    if (!stFile.is_open())
         return nullptr;
-    
+
     const size_t nFileSize = (size_t)stFile.tellg();
 
     stFile.seekg(0);
@@ -300,7 +276,7 @@ static std::vector<fs::path> vecCollectImages(const fs::path& stDirPath)
     return vecImageList;
 }
 
-int wmain(int argc, wchar_t* argv[])
+int main()
 {
     const wchar_t* pSzTrtPath = L"D:/0. Model_Save_Folder/Model_Save_Folder_Ha/model.trt";
     const fs::path stInputDir = L"D:/1. DataSet/CppImage";
@@ -343,11 +319,12 @@ int wmain(int argc, wchar_t* argv[])
         const fs::path& stCurrentPath = vecImagePaths[nI];
         std::wcout << L"[" << (nI + 1) << L"/" << vecImagePaths.size() << L"] Process: " << stCurrentPath.filename().wstring() << L"\n";
 
-        BgrImageInfo stBgrInfo;
-        if (!bLoadFileToBgr(stCurrentPath.wstring().c_str(), nInputW, nInputH, stBgrInfo)) continue;
+        ImageInfo strImgInfo;
+        if (!bLoadFile(stCurrentPath.wstring().c_str(), strImgInfo))
+            continue;
 
         std::vector<float> vecNhwc, vecNchw;
-        vBgrImageToNhwcFloatTensor(stBgrInfo, vecNhwc, true);
+        vImageToTensor(strImgInfo, vecNhwc, true);
         vNhwcToNchw(vecNhwc, vecNchw, nInputH, nInputW);
 
         LARGE_INTEGER stStart, stEnd;
@@ -367,7 +344,7 @@ int wmain(int argc, wchar_t* argv[])
         vArgmaxMask(hOutput.data(), nInputH, nInputW, vecResultMask);
 
         CImage stFinalImage;
-        vDrawResults(stBgrInfo, vecResultMask.data(), stFinalImage);
+        vDrawResults(strImgInfo, vecResultMask.data(), stFinalImage);
 
         fs::path stSavePath = stOutputDir / (L"pred_" + stCurrentPath.stem().wstring() + L".png");
         stFinalImage.Save(stSavePath.wstring().c_str());
