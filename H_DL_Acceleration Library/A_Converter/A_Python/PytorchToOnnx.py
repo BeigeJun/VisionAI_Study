@@ -1,7 +1,9 @@
 import sys
 import os
 import yaml
-root_path = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from pathlib import Path
+root_path = str(Path(__file__).resolve().parents[3])
+
 if root_path not in sys.path:
     sys.path.append(root_path)
 
@@ -13,7 +15,7 @@ from E_Segmentation.Unet.TransUNet import TransUNet
 model_path = "D:/0. Model_Save_Folder/Model_Save_Folder_HA"
 
 model = TransUNet(num_classes = 3, img_size=900)
-model.load_state_dict(torch.load(model_path + "/Best_Accuracy_Validation.pth"))
+model.load_state_dict(torch.load(model_path + "/model_cuda.pt"))
 model.eval()
 
 dummy_input = torch.randn(1, 3, 900, 900)
