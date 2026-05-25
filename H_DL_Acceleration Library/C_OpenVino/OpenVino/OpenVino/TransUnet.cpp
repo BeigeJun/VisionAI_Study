@@ -1,10 +1,11 @@
-#include <openvino/openvino.hpp>
 #include <opencv2/opencv.hpp>
 #include <iostream>
 #include <vector>
 #include <string>
 #include <filesystem>
 #include <algorithm>
+
+#include "OpenVino.h"
 
 namespace fs = std::filesystem;
 
@@ -37,16 +38,16 @@ std::vector<float> Preprocess(const cv::Mat& matBgrImg, int nInputSize) {
     return vfBlob;
 }
 
-cv::Mat GetArgmax(const float* pfData, int nNumClasses, int nH, int nW) {
+cv::Mat GetArgmax(const std::vector<float>& vecData, int nNumClasses, int nH, int nW) {
     cv::Mat matPred(nH, nW, CV_8U);
     int nHW = nH * nW;
     for (int y = 0; y < nH; ++y) {
         uchar* pRow = matPred.ptr<uchar>(y);
         for (int x = 0; x < nW; ++x) {
             int nBestCls = 0;
-            float fBestVal = pfData[y * nW + x];
+            float fBestVal = vecData[y * nW + x];
             for (int c = 1; c < nNumClasses; ++c) {
-                float fVal = pfData[c * nHW + y * nW + x];
+                float fVal = vecData[c * nHW + y * nW + x];
                 if (fVal > fBestVal) { fBestVal = fVal; nBestCls = c; }
             }
             pRow[x] = static_cast<uchar>(nBestCls);
@@ -95,49 +96,26 @@ int main() {
     const std::string strModelPath = "D:/0. Model_Save_Folder/Model_Save_Folder_HA/Vino/model.xml";
     const std::string strDataPath = "D:/1. DataSet/CppImage";
     const int nInputSize = 900;
-    const std::string strDevice = "CPU";
+    const std::string strDevice = "GPU";
 
-    ov::Core core;
-    core.set_property(strDevice, ov::enable_profiling(true));
-
-    auto ptrModel = core.read_model(strModelPath);
-    ptrModel->reshape({ 1, 3, (long)nInputSize, (long)nInputSize });
-
-    ov::CompiledModel compiledModel = core.compile_model(ptrModel, strDevice);
-    ov::InferRequest inferRequest = compiledModel.create_infer_request();
-    int nNumClasses = (int)compiledModel.output().get_partial_shape()[1].get_length();
+    OpenVino OV(strModelPath, strDevice, nInputSize, nInputSize);
 
     auto vpathImagePaths = CollectImages(strDataPath);
-    ov::Tensor inputTensor = inferRequest.get_input_tensor();
 
     for (size_t i = 0; i < vpathImagePaths.size(); ++i) {
         cv::Mat matImg = cv::imread(vpathImagePaths[i].string());
         if (matImg.empty()) continue;
-
         auto vfBlob = Preprocess(matImg, nInputSize);
-        std::memcpy(inputTensor.data<float>(), vfBlob.data(), vfBlob.size() * sizeof(float));
 
-        inferRequest.infer();
+        std::vector<float> vecResult = OV.OpenVino::vecInfer(vfBlob);
+        int nClassNum = OV.nReturnClassNum();
+        std::vector<size_t> vecOutputShape = OV.vecReturnOutputShape();
 
-        double dTotalInferenceMs = 0;
-        for (const auto& info : inferRequest.get_profiling_info()) {
-            if (info.status == ov::ProfilingInfo::Status::EXECUTED) {
-                dTotalInferenceMs += info.real_time.count() / 1000.0;
-            }
-        }
-
-        const float* pfOutData = inferRequest.get_output_tensor().data<const float>();
-        auto shapeOut = inferRequest.get_output_tensor().get_shape();
-        cv::Mat matPredMask = GetArgmax(pfOutData, nNumClasses, (int)shapeOut[2], (int)shapeOut[3]);
-
+        cv::Mat matPredMask = GetArgmax(vecResult, nClassNum, (int)vecOutputShape[2], (int)vecOutputShape[3]);
         if (matPredMask.size() != matImg.size())
             cv::resize(matPredMask, matPredMask, matImg.size(), 0, 0, cv::INTER_NEAREST);
 
         cv::Mat matVis = DrawResults(matImg, matPredMask);
-
-        std::cout << "[" << i + 1 << "/" << vpathImagePaths.size() << "] "
-            << "Time: " << dTotalInferenceMs << " ms" << std::endl;
-
         cv::imshow("Prediction", matVis);
         if (cv::waitKey(1) == 27) break;
     }

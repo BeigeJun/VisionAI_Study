@@ -1,13 +1,5 @@
-#include <onnxruntime_cxx_api.h>
 #include <opencv2/opencv.hpp>
-#include <Windows.h>
-#include <iostream>
-#include <vector>
-#include <string>
-#include <filesystem>
-#include <algorithm>
-
-namespace fs = std::filesystem;
+#include "Onnx.h"
 
 static const std::vector<std::string> g_vstrClassNames = { "Good", "Broken", "Contamination" };
 static const std::vector<cv::Scalar>  g_vscClassColors = {
@@ -37,23 +29,19 @@ std::vector<float> Preprocess(const cv::Mat& matBgrImg, int nInputSize)
     return vfBlob;
 }
 
-cv::Mat GetArgmax(const float* pfData, int nNumClasses, int nH, int nW)
-{
+cv::Mat GetArgmax(const std::vector<float>& vecData, int nNumClasses, int nH, int nW) {
     cv::Mat matPred(nH, nW, CV_8U);
-    const int nHW = nH * nW;
-    for (int nY = 0; nY < nH; ++nY)
-    {
-        uchar* pRow = matPred.ptr<uchar>(nY);
-        for (int nX = 0; nX < nW; ++nX)
-        {
-            int   nBestCls = 0;
-            float fBestVal = pfData[nY * nW + nX];
-            for (int nC = 1; nC < nNumClasses; ++nC)
-            {
-                float fVal = pfData[nC * nHW + nY * nW + nX];
-                if (fVal > fBestVal) { fBestVal = fVal; nBestCls = nC; }
+    int nHW = nH * nW;
+    for (int y = 0; y < nH; ++y) {
+        uchar* pRow = matPred.ptr<uchar>(y);
+        for (int x = 0; x < nW; ++x) {
+            int nBestCls = 0;
+            float fBestVal = vecData[y * nW + x];
+            for (int c = 1; c < nNumClasses; ++c) {
+                float fVal = vecData[c * nHW + y * nW + x];
+                if (fVal > fBestVal) { fBestVal = fVal; nBestCls = c; }
             }
-            pRow[nX] = static_cast<uchar>(nBestCls);
+            pRow[x] = static_cast<uchar>(nBestCls);
         }
     }
     return matPred;
@@ -110,39 +98,7 @@ int main()
         const std::string strDataPath = "D:/1. DataSet/CppImage";
         const int         nInputSize = 900;
 
-        Ort::Env            ortEnv(ORT_LOGGING_LEVEL_WARNING, "TransUNet");
-        Ort::SessionOptions ortSessionOpts;
-        ortSessionOpts.SetIntraOpNumThreads(4);
-        ortSessionOpts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
-
-        try
-        {
-            OrtCUDAProviderOptions ortCudaOpts{};
-            ortCudaOpts.device_id = 0;
-            ortCudaOpts.cudnn_conv_algo_search = OrtCudnnConvAlgoSearchExhaustive;
-            ortCudaOpts.gpu_mem_limit = SIZE_MAX;
-            ortCudaOpts.arena_extend_strategy = 0;
-            ortCudaOpts.do_copy_in_default_stream = 1;
-            ortSessionOpts.AppendExecutionProvider_CUDA(ortCudaOpts);
-            std::cout << "Device: CUDA (GPU 0)" << std::endl;
-        }
-        catch (const Ort::Exception& e)
-        {
-            std::cerr << "[CUDA INIT FAILED] " << e.what() << std::endl;
-            std::cout << "Fallback: CPU" << std::endl;
-        }
-
-        std::wstring wstrModelPath(strModelPath.begin(), strModelPath.end());
-        Ort::Session ortSession(ortEnv, wstrModelPath.c_str(), ortSessionOpts);
-
-        Ort::AllocatorWithDefaultOptions ortAllocator;
-        auto pstrInputName = ortSession.GetInputNameAllocated(0, ortAllocator);
-        auto pstrOutputName = ortSession.GetOutputNameAllocated(0, ortAllocator);
-        const char* pszInputName = pstrInputName.get();
-        const char* pszOutputName = pstrOutputName.get();
-
-        const int nNumClasses = static_cast<int>(
-            ortSession.GetOutputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape()[1]);
+		Onnx onnx(strModelPath, nInputSize, nInputSize);
 
         std::vector<fs::path> vpathImages = CollectImages(strDataPath);
         if (vpathImages.empty())
@@ -152,43 +108,24 @@ int main()
             return EXIT_FAILURE;
         }
 
-        const std::array<int64_t, 4> anInputShape = { 1, 3,
-            static_cast<int64_t>(nInputSize), static_cast<int64_t>(nInputSize) };
-        const size_t nInputElemCount = 1 * 3 * nInputSize * nInputSize;
-
-        Ort::MemoryInfo ortCpuMemInfo =
-            Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault);
-
         LARGE_INTEGER nFreq, nStart, nEnd;
         QueryPerformanceFrequency(&nFreq);
 
         for (size_t nIdx = 0; nIdx < vpathImages.size(); ++nIdx)
         {
+            QueryPerformanceCounter(&nStart);
             cv::Mat matImg = cv::imread(vpathImages[nIdx].string());
             if (matImg.empty()) continue;
 
             std::vector<float> vfBlob = Preprocess(matImg, nInputSize);
 
-            Ort::Value ortInputTensor = Ort::Value::CreateTensor<float>(
-                ortCpuMemInfo, vfBlob.data(), nInputElemCount,
-                anInputShape.data(), anInputShape.size());
-
-            QueryPerformanceCounter(&nStart);
-
-            std::vector<Ort::Value> vortOutputTensors =
-                ortSession.Run(Ort::RunOptions{ nullptr },
-                    &pszInputName, &ortInputTensor, 1,
-                    &pszOutputName, 1);
+            std::vector<float> vecOuntPut = onnx.vecInfer(vfBlob);
 
             QueryPerformanceCounter(&nEnd);
             const double dfMs = (double)(nEnd.QuadPart - nStart.QuadPart) * 1000.0 / (double)nFreq.QuadPart;
+			int nClassNum = onnx.nReturnClassNum();
 
-            const float* pfOutData = vortOutputTensors[0].GetTensorData<float>();
-            auto vn64OutShape = vortOutputTensors[0].GetTensorTypeAndShapeInfo().GetShape();
-            const int nOutH = static_cast<int>(vn64OutShape[2]);
-            const int nOutW = static_cast<int>(vn64OutShape[3]);
-
-            cv::Mat matPredMask = GetArgmax(pfOutData, nNumClasses, nOutH, nOutW);
+            cv::Mat matPredMask = GetArgmax(vecOuntPut, nClassNum, nInputSize, nInputSize);
 
             if (matPredMask.size() != matImg.size())
                 cv::resize(matPredMask, matPredMask, matImg.size(), 0, 0, cv::INTER_NEAREST);

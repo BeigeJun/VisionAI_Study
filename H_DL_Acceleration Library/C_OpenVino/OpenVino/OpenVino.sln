@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
-VisualStudioVersion = 17.14.36212.18 d17.14
+VisualStudioVersion = 17.14.36212.18
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "OpenVino", "OpenVino\OpenVino.vcxproj", "{CBC084EF-71FA-41D2-88DC-377D31552AEE}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "OpenVinoDLL", "OpenVinoDLL\OpenVinoDLL.vcxproj", "{82803682-1348-494D-9EB2-2105229F97EB}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +23,14 @@ Global
 		{CBC084EF-71FA-41D2-88DC-377D31552AEE}.Release|x64.Build.0 = Release|x64
 		{CBC084EF-71FA-41D2-88DC-377D31552AEE}.Release|x86.ActiveCfg = Release|Win32
 		{CBC084EF-71FA-41D2-88DC-377D31552AEE}.Release|x86.Build.0 = Release|Win32
+		{82803682-1348-494D-9EB2-2105229F97EB}.Debug|x64.ActiveCfg = Debug|x64
+		{82803682-1348-494D-9EB2-2105229F97EB}.Debug|x64.Build.0 = Debug|x64
+		{82803682-1348-494D-9EB2-2105229F97EB}.Debug|x86.ActiveCfg = Debug|Win32
+		{82803682-1348-494D-9EB2-2105229F97EB}.Debug|x86.Build.0 = Debug|Win32
+		{82803682-1348-494D-9EB2-2105229F97EB}.Release|x64.ActiveCfg = Release|x64
+		{82803682-1348-494D-9EB2-2105229F97EB}.Release|x64.Build.0 = Release|x64
+		{82803682-1348-494D-9EB2-2105229F97EB}.Release|x86.ActiveCfg = Release|Win32
+		{82803682-1348-494D-9EB2-2105229F97EB}.Release|x86.Build.0 = Release|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
