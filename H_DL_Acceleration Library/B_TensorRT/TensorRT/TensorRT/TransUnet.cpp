@@ -1,26 +1,5 @@
-#include <NvInfer.h>
-#include <cuda_runtime_api.h>
 #include <opencv2/opencv.hpp>
-#include <Windows.h>
-#include <iostream>
-#include <fstream>
-#include <vector>
-#include <string>
-#include <filesystem>
-#include <algorithm>
-#include <memory>
-
-namespace fs = std::filesystem;
-
-class TrtLogger : public nvinfer1::ILogger
-{
-public:
-    void log(Severity eSeverity, const char* pszMsg) noexcept override
-    {
-        if (eSeverity <= Severity::kWARNING)
-            std::cerr << "[TRT] " << pszMsg << std::endl;
-    }
-};
+#include "TensorRT.h"
 
 static const std::vector<std::string> g_vstrClassNames = { "Good", "Broken", "Contamination" };
 static const std::vector<cv::Scalar>  g_vscClassColors = {
@@ -136,59 +115,7 @@ int main()
     const std::string strDataPath = "D:/1. DataSet/CppImage";
     const int         nInputSize = 900;
 
-    TrtLogger trtLogger;
-    std::unique_ptr<nvinfer1::IRuntime> upRuntime(
-        nvinfer1::createInferRuntime(trtLogger));
-    if (!upRuntime) { std::cerr << "createInferRuntime failed" << std::endl; return EXIT_FAILURE; }
-
-    std::vector<char> vcEngineData = LoadEngineFile(strEnginePath);
-    std::unique_ptr<nvinfer1::ICudaEngine> upEngine(
-        upRuntime->deserializeCudaEngine(vcEngineData.data(), vcEngineData.size()));
-    if (!upEngine) { std::cerr << "deserializeCudaEngine failed" << std::endl; return EXIT_FAILURE; }
-
-    std::unique_ptr<nvinfer1::IExecutionContext> upContext(
-        upEngine->createExecutionContext());
-    if (!upContext) { std::cerr << "createExecutionContext failed" << std::endl; return EXIT_FAILURE; }
-
-    const int nNbIO = upEngine->getNbIOTensors();
-    std::string strInputName, strOutputName;
-    for (int i = 0; i < nNbIO; ++i)
-    {
-        const char* pszName = upEngine->getIOTensorName(i);
-        if (upEngine->getTensorIOMode(pszName) == nvinfer1::TensorIOMode::kINPUT)
-            strInputName = pszName;
-        else
-            strOutputName = pszName;
-    }
-    std::cout << "Input  tensor : " << strInputName << std::endl;
-    std::cout << "Output tensor : " << strOutputName << std::endl;
-
-    nvinfer1::Dims4 dimsInput(1, 3, nInputSize, nInputSize);
-    upContext->setInputShape(strInputName.c_str(), dimsInput);
-
-    nvinfer1::Dims dimsOutput = upContext->getTensorShape(strOutputName.c_str());
-    const int nNumClasses = static_cast<int>(dimsOutput.d[1]);
-    const int nOutH = static_cast<int>(dimsOutput.d[2]);
-    const int nOutW = static_cast<int>(dimsOutput.d[3]);
-
-    std::cout << "NumClasses=" << nNumClasses
-        << "  OutH=" << nOutH << "  OutW=" << nOutW << std::endl;
-
-    const size_t nInputBytes = 1 * 3 * nInputSize * nInputSize * sizeof(float);
-    const size_t nOutputBytes = 1 * nNumClasses * nOutH * nOutW * sizeof(float);
-
-    void* pDevInput = nullptr;
-    void* pDevOutput = nullptr;
-    cudaMalloc(&pDevInput, nInputBytes);
-    cudaMalloc(&pDevOutput, nOutputBytes);
-
-    std::vector<float> vfOutputHost(nNumClasses * nOutH * nOutW);
-
-    cudaStream_t cuStream;
-    cudaStreamCreate(&cuStream);
-
-    upContext->setTensorAddress(strInputName.c_str(), pDevInput);
-    upContext->setTensorAddress(strOutputName.c_str(), pDevOutput);
+    TensorRT TensorRT(strEnginePath, strDataPath, nInputSize, nInputSize);
 
     std::vector<fs::path> vpathImages = CollectImages(strDataPath);
     if (vpathImages.empty())
@@ -207,27 +134,14 @@ int main()
 
         std::vector<float> vfBlob = Preprocess(matImg, nInputSize);
 
-        cudaMemcpyAsync(pDevInput, vfBlob.data(), nInputBytes, cudaMemcpyHostToDevice, cuStream);
-        cudaStreamSynchronize(cuStream);
-
         QueryPerformanceCounter(&nStart);
-
-        if (!upContext->enqueueV3(cuStream))
-        {
-            std::cerr << "enqueueV3 failed on image " << vpathImages[nIdx] << std::endl;
-            continue;
-        }
-
-        cudaStreamSynchronize(cuStream);
+        std::vector<float> vecfOutPut = TensorRT.vecInfer(vfBlob);
         QueryPerformanceCounter(&nEnd);
 
         const double dfMs = static_cast<double>(nEnd.QuadPart - nStart.QuadPart)
             * 1000.0 / static_cast<double>(nFreq.QuadPart);
 
-        cudaMemcpyAsync(vfOutputHost.data(), pDevOutput, nOutputBytes, cudaMemcpyDeviceToHost, cuStream);
-        cudaStreamSynchronize(cuStream);
-
-        cv::Mat matPredMask = GetArgmax(vfOutputHost.data(), nNumClasses, nOutH, nOutW);
+        cv::Mat matPredMask = GetArgmax(vecfOutPut.data(), TensorRT.nReturnClassNum(), nInputSize, nInputSize);
 
         if (matPredMask.size() != matImg.size())
             cv::resize(matPredMask, matPredMask, matImg.size(), 0, 0, cv::INTER_NEAREST);
@@ -242,9 +156,7 @@ int main()
         if (cv::waitKey(0) == 27) break;
     }
 
-    cudaStreamDestroy(cuStream);
-    cudaFree(pDevInput);
-    cudaFree(pDevOutput);
+    TensorRT.Terminate();
     cv::destroyAllWindows();
 
     return EXIT_SUCCESS;
