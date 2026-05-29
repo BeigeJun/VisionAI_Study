@@ -6,9 +6,22 @@
 
 #ifndef PCH_H
 #define PCH_H
+#define NOMINMAX
+
+#define USE_OPENVINO
+#define USE_ONNX
+#define USE_TENSORRT
+#define USE_PYTORCH
 
 // 여기에 미리 컴파일하려는 헤더 추가
 #include "framework.h"
+#include "IInference.h"
+
+#include <iostream>
+#include <vector>
+#include <string>
+#include <filesystem>
+#include <algorithm>
 
 #define CUDA_LIB    "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.9/lib/x64/"
 #define TRT_LIB     "D:/5.Lib_Files/1.TensorRT/TensorRT-10.10.0.31/lib/"

@@ -13,33 +13,72 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="소스 파일\Backends">
+      <UniqueIdentifier>{37ebff28-1f25-4ab3-abcc-f90b2d707f26}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Backends">
+      <UniqueIdentifier>{0a787aae-537e-421a-9970-7950eff524c6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Core">
+      <UniqueIdentifier>{80d0a50b-5818-46a8-a8f0-cdab817bfadf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Core">
+      <UniqueIdentifier>{c027fd07-f8f1-4c65-ab2c-cef71a6fec56}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\ETC">
+      <UniqueIdentifier>{b3da7543-2e41-414c-98a4-eef6391d10d9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\ETC">
+      <UniqueIdentifier>{87324ece-c698-443f-99e0-8d171fd52a90}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="framework.h">
-      <Filter>헤더 파일</Filter>
+    <ClInclude Include="Onnx.h">
+      <Filter>헤더 파일\Backends</Filter>
     </ClInclude>
-    <ClInclude Include="pch.h">
-      <Filter>헤더 파일</Filter>
+    <ClInclude Include="OpenVino.h">
+      <Filter>헤더 파일\Backends</Filter>
+    </ClInclude>
+    <ClInclude Include="Pytorch.h">
+      <Filter>헤더 파일\Backends</Filter>
+    </ClInclude>
+    <ClInclude Include="TensorRT.h">
+      <Filter>헤더 파일\Backends</Filter>
     </ClInclude>
     <ClInclude Include="Total_DLL.h">
-      <Filter>헤더 파일</Filter>
+      <Filter>헤더 파일\Core</Filter>
+    </ClInclude>
+    <ClInclude Include="framework.h">
+      <Filter>헤더 파일\ETC</Filter>
     </ClInclude>
     <ClInclude Include="IInference.h">
-      <Filter>헤더 파일</Filter>
+      <Filter>헤더 파일\ETC</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>헤더 파일\ETC</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="dllmain.cpp">
-      <Filter>소스 파일</Filter>
+    <ClCompile Include="Onnx.cpp">
+      <Filter>소스 파일\Backends</Filter>
     </ClCompile>
-    <ClCompile Include="pch.cpp">
-      <Filter>소스 파일</Filter>
+    <ClCompile Include="OpenVino.cpp">
+      <Filter>소스 파일\Backends</Filter>
+    </ClCompile>
+    <ClCompile Include="Pytorch.cpp">
+      <Filter>소스 파일\Backends</Filter>
+    </ClCompile>
+    <ClCompile Include="TensorRT.cpp">
+      <Filter>소스 파일\Backends</Filter>
     </ClCompile>
     <ClCompile Include="Total_DLL.cpp">
-      <Filter>소스 파일</Filter>
+      <Filter>소스 파일\Core</Filter>
     </ClCompile>
-    <ClCompile Include="IInference.cpp">
-      <Filter>소스 파일</Filter>
+    <ClCompile Include="dllmain.cpp">
+      <Filter>소스 파일\ETC</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>소스 파일\ETC</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
