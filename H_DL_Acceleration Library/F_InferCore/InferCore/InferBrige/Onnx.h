@@ -25,8 +25,8 @@ private:
     std::vector<int64_t> m_aInputShape;
     std::vector<int64_t> m_shapeOutputShape;
 
-    const char* mp_cInput;
-    const char* mp_cOutput;
+    const char* m_pcInput;
+    const char* m_pcOutput;
 
     int m_nNumClasses;
 };

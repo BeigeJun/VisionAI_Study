@@ -33,6 +33,20 @@ std::vector<float> Preprocess(const cv::Mat& matBgrImg, int nInputSize) {
     return vfBlob;
 }
 
+std::vector<fs::path> CollectImages(const std::string& strDataPath) {
+    std::vector<fs::path> vpathPaths;
+    if (!fs::exists(strDataPath)) return vpathPaths;
+    for (const auto& entry : fs::recursive_directory_iterator(strDataPath)) {
+        if (!entry.is_regular_file()) continue;
+        std::string strExt = entry.path().extension().string();
+        std::transform(strExt.begin(), strExt.end(), strExt.begin(), ::tolower);
+        if (strExt == ".png" || strExt == ".jpg" || strExt == ".jpeg" || strExt == ".bmp")
+            vpathPaths.push_back(entry.path());
+    }
+    std::sort(vpathPaths.begin(), vpathPaths.end());
+    return vpathPaths;
+}
+
 cv::Mat GetArgmax(const std::vector<float>& vecData, int nNumClasses, int nH, int nW) {
     cv::Mat matPred(nH, nW, CV_8U);
     int nHW = nH * nW;
@@ -71,20 +85,6 @@ cv::Mat DrawResults(const cv::Mat& matBgrImg, const cv::Mat& matPredMask) {
     cv::Mat matBlended;
     cv::addWeighted(matOverlay, 0.4, matResult, 0.6, 0.0, matBlended);
     return matBlended;
-}
-
-std::vector<fs::path> CollectImages(const std::string& strDataPath) {
-    std::vector<fs::path> vpathPaths;
-    if (!fs::exists(strDataPath)) return vpathPaths;
-    for (const auto& entry : fs::recursive_directory_iterator(strDataPath)) {
-        if (!entry.is_regular_file()) continue;
-        std::string strExt = entry.path().extension().string();
-        std::transform(strExt.begin(), strExt.end(), strExt.begin(), ::tolower);
-        if (strExt == ".png" || strExt == ".jpg" || strExt == ".jpeg" || strExt == ".bmp")
-            vpathPaths.push_back(entry.path());
-    }
-    std::sort(vpathPaths.begin(), vpathPaths.end());
-    return vpathPaths;
 }
 
 int main() {

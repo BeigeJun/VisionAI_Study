@@ -1,7 +1,13 @@
 #include "pch.h"
 #include "Onnx.h"
 
-Onnx::Onnx() : m_ortEnv(ORT_LOGGING_LEVEL_WARNING, "TransUnet"), m_ortMemInfo(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault))
+Onnx::Onnx() 
+    : m_ortEnv(ORT_LOGGING_LEVEL_WARNING, "TransUnet"), 
+      m_ortMemInfo(Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
+      m_nInputElemCount(0), 
+      m_nNumClasses(0), 
+      m_pcInput(nullptr), 
+      m_pcOutput(nullptr) 
 {
 }
 
@@ -27,8 +33,8 @@ bool Onnx::bLoad(const std::string& strModelPath, const std::string& strDevice, 
         m_strInputName = mp_ortSession->GetInputNameAllocated(0, ortAllocator).get();
         m_strOutputName = mp_ortSession->GetOutputNameAllocated(0, ortAllocator).get();
 
-        mp_cInput = m_strInputName.c_str();
-        mp_cOutput = m_strOutputName.c_str();
+        m_pcInput = m_strInputName.c_str();
+        m_pcOutput = m_strOutputName.c_str();
 
         m_nNumClasses = static_cast<int>(mp_ortSession->GetOutputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape()[1]);
 
@@ -49,8 +55,8 @@ std::vector<float> Onnx::vecInfer(const std::vector<float>& vecInputData)
 
     std::vector<Ort::Value> vecOrtOutputTensors =
         mp_ortSession->Run(Ort::RunOptions{ nullptr },
-            &mp_cInput, &ortInputTensor, 1,
-            &mp_cOutput, 1);
+            &m_pcInput, &ortInputTensor, 1,
+            &m_pcOutput, 1);
 
     const float* pfOutData = vecOrtOutputTensors[0].GetTensorData<float>();
     std::vector<int64_t> vecOutShape = vecOrtOutputTensors[0].GetTensorTypeAndShapeInfo().GetShape();
