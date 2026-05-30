@@ -7,7 +7,7 @@ bool OpenVino::bLoad(const std::string& strModelPath, const std::string& strDevi
     try {
         m_Core.set_property(strDevice, ov::enable_profiling(true));
 
-        auto ptrModel = m_Core.read_model(strModelPath);
+        auto ptrModel = m_Core.read_model(strModelPath + "/model.xml");
         ptrModel->reshape({ 1, 3, nHeight, nWidth });
 
         m_CompiledModel = m_Core.compile_model(ptrModel, strDevice);

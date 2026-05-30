@@ -1,15 +1,8 @@
 ﻿#include "pch.h"
-#include <iostream>
 #include "Total_DLL.h"
-#include "IInference.h"
 
 #include <opencv2/opencv.hpp>
-#include <vector>
-#include <string>
-#include <filesystem>
-#include <algorithm>
 
-namespace fs = std::filesystem;
 
 static const std::vector<std::string> g_vstrClassNames = { "Good", "Broken", "Contamination" };
 static const std::vector<cv::Scalar> g_vscClassColors = {
@@ -95,13 +88,13 @@ std::vector<fs::path> CollectImages(const std::string& strDataPath) {
 }
 
 int main() {
-    const std::string strModelPath = "D:/0. Model_Save_Folder/Model_Save_Folder_HA/Vino/model.xml";
+    const std::string strModelPath = "D:/0. Model_Save_Folder/Model_Save_Folder_HA";
     const std::string strDataPath = "D:/1. DataSet/CppImage";
     const int nInputSize = 900;
     const std::string strDevice = "GPU";
 
     try {
-        std::unique_ptr<IInference> pInference = Total_DLL::Create(BackendType::OpenVINO);
+        std::unique_ptr<IInference> pInference = Total_DLL::Create(BackendType::TensorRT);
 
         if (!pInference->bLoad(strModelPath, strDevice, nInputSize, nInputSize)) {
             std::cerr << "Failed to load model." << std::endl;

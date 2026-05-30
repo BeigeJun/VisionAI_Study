@@ -39,9 +39,6 @@
     <ClInclude Include="OpenVino.h">
       <Filter>헤더 파일\Backends</Filter>
     </ClInclude>
-    <ClInclude Include="Pytorch.h">
-      <Filter>헤더 파일\Backends</Filter>
-    </ClInclude>
     <ClInclude Include="TensorRT.h">
       <Filter>헤더 파일\Backends</Filter>
     </ClInclude>
@@ -63,9 +60,6 @@
       <Filter>소스 파일\Backends</Filter>
     </ClCompile>
     <ClCompile Include="OpenVino.cpp">
-      <Filter>소스 파일\Backends</Filter>
-    </ClCompile>
-    <ClCompile Include="Pytorch.cpp">
       <Filter>소스 파일\Backends</Filter>
     </ClCompile>
     <ClCompile Include="TensorRT.cpp">

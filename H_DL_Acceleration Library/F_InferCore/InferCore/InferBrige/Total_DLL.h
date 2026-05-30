@@ -5,7 +5,6 @@
 #include "OpenVino.h"
 #include "Onnx.h"
 #include "TensorRT.h"
-#include "PyTorch.h"
 
 #ifdef BRIGE_EXPORTS
 #define DLL_EXPORT  __declspec(dllexport)
@@ -16,7 +15,6 @@
 enum class BackendType {
     TensorRT,
     ONNX,
-    PyTorch,
     OpenVINO
 };
 class DLL_EXPORT Total_DLL

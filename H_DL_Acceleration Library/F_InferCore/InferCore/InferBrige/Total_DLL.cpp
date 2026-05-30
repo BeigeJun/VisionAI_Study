@@ -6,20 +6,15 @@ std::unique_ptr<IInference> Total_DLL::Create(BackendType type)
 {
     switch (type)
     {
-//#ifdef USE_TENSORRT
-//    case BackendType::TensorRT:
-//        return std::make_unique<TensorRT>();
-//#endif
-//
-//#ifdef USE_ONNX
-//    case BackendType::ONNX:
-//        return std::make_unique<Onnx>();
-//#endif
-//
-//#ifdef USE_PYTORCH
-//    case BackendType::PyTorch:
-//        return std::make_unique<Pytorch>();
-//#endif
+#ifdef USE_TENSORRT
+    case BackendType::TensorRT:
+        return std::make_unique<TensorRT>();
+#endif
+
+#ifdef USE_ONNX
+    case BackendType::ONNX:
+        return std::make_unique<Onnx>();
+#endif
 
 #ifdef USE_OPENVINO
     case BackendType::OpenVINO:
