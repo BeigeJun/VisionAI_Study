@@ -146,6 +146,7 @@
     <ClInclude Include="pch.h" />
     <ClInclude Include="TensorRT.h" />
     <ClInclude Include="Total_DLL.h" />
+    <ClInclude Include="Wrapper.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
@@ -159,6 +160,7 @@
     </ClCompile>
     <ClCompile Include="TensorRT.cpp" />
     <ClCompile Include="Total_DLL.cpp" />
+    <ClCompile Include="Wrapper.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

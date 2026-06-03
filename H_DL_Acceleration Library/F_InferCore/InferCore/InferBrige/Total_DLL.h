@@ -13,9 +13,9 @@
 #endif
 
 enum class BackendType {
-    TensorRT,
     ONNX,
-    OpenVINO
+    OpenVINO,
+    TensorRT
 };
 class DLL_EXPORT Total_DLL
 {

@@ -54,6 +54,9 @@
     <ClInclude Include="pch.h">
       <Filter>헤더 파일\ETC</Filter>
     </ClInclude>
+    <ClInclude Include="Wrapper.h">
+      <Filter>헤더 파일\ETC</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Onnx.cpp">
@@ -72,6 +75,9 @@
       <Filter>소스 파일\ETC</Filter>
     </ClCompile>
     <ClCompile Include="pch.cpp">
+      <Filter>소스 파일\ETC</Filter>
+    </ClCompile>
+    <ClCompile Include="Wrapper.cpp">
       <Filter>소스 파일\ETC</Filter>
     </ClCompile>
   </ItemGroup>
