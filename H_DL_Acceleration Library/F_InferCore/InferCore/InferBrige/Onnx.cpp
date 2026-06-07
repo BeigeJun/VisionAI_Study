@@ -41,6 +41,7 @@ bool Onnx::bLoad(const std::string& strModelPath, const std::string& strDevice, 
         m_aInputShape = { 1, 3, static_cast<int64_t>(nHeight), static_cast<int64_t>(nWidth) };
         m_shapeOutputShape = mp_ortSession->GetOutputTypeInfo(0).GetTensorTypeAndShapeInfo().GetShape();
         m_nInputElemCount = 1 * 3 * nHeight * nWidth;
+        return true;
     }
     catch (...) {
         return false;

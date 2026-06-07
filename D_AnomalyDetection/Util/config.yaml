@@ -1,8 +1,8 @@
 load_path : 'D:\1. DataSet\1-2. MvTec_Anomaly\1.Bottel'
-save_path : 'D:\0. Model_Save_Folder'
+save_path : 'D:\0. Model_Save_Folder_UNIAD'
 
 epoch : 1000
 patience : 100
-batch_size : 16
+batch_size : 8
 
 num_class : 2

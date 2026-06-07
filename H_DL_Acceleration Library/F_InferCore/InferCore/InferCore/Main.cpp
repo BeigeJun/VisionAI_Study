@@ -88,13 +88,13 @@ cv::Mat DrawResults(const cv::Mat& matBgrImg, const cv::Mat& matPredMask) {
 }
 
 int main() {
-    const std::string strModelPath = "D:/0. Model_Save_Folder/Model_Save_Folder_HA";
+    const std::string strModelPath = "D:/0. Model_Save_Folder/Model_Save_Folder_HA/Vino";
     const std::string strDataPath = "D:/1. DataSet/CppImage";
     const int nInputSize = 900;
     const std::string strDevice = "GPU";
 
     try {
-        std::unique_ptr<IInference> pInference = Total_DLL::Create(BackendType::TensorRT);
+        std::unique_ptr<IInference> pInference = Total_DLL::Create(BackendType::OpenVINO);
 
         if (!pInference->bLoad(strModelPath, strDevice, nInputSize, nInputSize)) {
             std::cerr << "Failed to load model." << std::endl;

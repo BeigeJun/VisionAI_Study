@@ -5,12 +5,13 @@
 bool OpenVino::bLoad(const std::string& strModelPath, const std::string& strDevice, const int nHeight, const int nWidth)
 {
     try {
-        m_Core.set_property(strDevice, ov::enable_profiling(true));
+        
 
         auto ptrModel = m_Core.read_model(strModelPath + "/model.xml");
         ptrModel->reshape({ 1, 3, nHeight, nWidth });
 
         m_CompiledModel = m_Core.compile_model(ptrModel, strDevice);
+        m_Core.set_property(strDevice, ov::enable_profiling(true));
         m_InferRequest = m_CompiledModel.create_infer_request();
 
         m_nNumClasses = (int)m_CompiledModel.output().get_partial_shape()[1].get_length();
